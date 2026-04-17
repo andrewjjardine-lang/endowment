@@ -77,9 +77,9 @@ textarea { resize: vertical; min-height: 70px; }
 .sidebar-footer { margin-top:auto; padding:14px 16px; border-top:1px solid rgba(255,255,255,.08); }
 .sidebar-footer .user-email { font-size:11px; color:rgba(255,255,255,.40); margin-bottom:8px; word-break:break-all; }
 .sidebar-footer .role-chip { display:inline-block; font-size:10px; font-weight:600; padding:2px 8px; border-radius:99px; background:rgba(184,134,11,.25); color:var(--gold-bright); text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px; }
-#topbar { position:fixed; top:0; left:var(--sidebar-w); right:0; height:var(--top-h); background:var(--white); border-bottom:1px solid var(--gray-100); display:flex; align-items:center; padding:0 20px; gap:10px; z-index:99; box-shadow: 0 1px 0 var(--gray-100); }
-.topbar-title { font-family:'Libre Baskerville',serif; font-size:17px; color:var(--navy); flex:1; }
-.topbar-actions { display:flex; align-items:center; gap:8px; }
+#topbar { position:fixed; top:0; left:var(--sidebar-w); right:0; height:var(--top-h); background:var(--white); border-bottom:1px solid var(--gray-100); display:flex; align-items:center; padding:0 16px; gap:8px; z-index:99; box-shadow: 0 1px 0 var(--gray-100); }
+.topbar-title { font-family:'Libre Baskerville',serif; font-size:17px; color:var(--navy); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 #main-content { margin-left:var(--sidebar-w); padding-top:var(--top-h); min-height:100vh; }
 .page { display:none; padding:24px; max-width:1200px; }
 .page.active { display:block; }
@@ -208,25 +208,48 @@ tr:hover td { background:var(--gray-50); }
 }
 
 /* RESPONSIVE */
+@media (max-width:1100px) {
+  #dash-charts-grid { grid-template-columns:1fr !important; }
+}
 @media (max-width:900px) {
   .metrics-grid { grid-template-columns:repeat(2,1fr); }
   .form-grid { grid-template-columns:1fr; }
   .form-grid.cols-3 { grid-template-columns:1fr; }
+  #pools-grid { grid-template-columns:1fr !important; }
 }
 @media (max-width:768px) {
-  #sidebar { transform:translateX(-100%); transition:transform .2s; }
+  :root { --sidebar-w: 260px; }
+  #sidebar { transform:translateX(-100%); transition:transform .25s cubic-bezier(.4,0,.2,1); box-shadow: 4px 0 20px rgba(0,0,0,.25); }
   #sidebar.open { transform:translateX(0); }
-  #topbar { left:0; }
+  #topbar { left:0; padding:0 14px; }
   #main-content { margin-left:0; }
   .hamburger { display:block; }
   .metrics-grid { grid-template-columns:1fr 1fr; }
-  .modal { max-width:100%; margin:0; border-radius:0; max-height:100vh; }
-  .modal-overlay { padding:0; align-items:flex-end; }
-  .page { padding:16px; }
+  .modal { max-width:100%; margin:0; border-radius:12px 12px 0 0; max-height:92vh; }
+  .modal-overlay { padding:0; align-items:flex-end; background:rgba(0,0,0,.55); }
+  .page { padding:14px; }
+  .page-header { flex-direction:column; align-items:flex-start; }
+  .page-header-actions { width:100%; display:flex; gap:6px; }
+  .page-header-actions button { flex:1; }
+  .topbar-title { font-size:15px; }
+  .tabs { overflow-x:auto; white-space:nowrap; -webkit-overflow-scrolling:touch; }
+  .tab-btn { flex-shrink:0; }
+  th, td { font-size:12px; padding:7px 8px; }
+  .fund-detail-meta { gap:12px; }
+  .sidebar-header { padding:16px 14px 12px; }
 }
 @media (max-width:480px) {
   .metrics-grid { grid-template-columns:1fr; }
+  .metric-card { padding:12px 14px; }
+  .metric-value { font-size:18px; }
+  .toolbar { gap:6px; }
+  .search-input { max-width:100%; flex:1; }
+  .page-header h2 { font-size:18px; }
 }
+
+/* Mobile overlay backdrop - close sidebar on tap outside */
+#sidebar-backdrop { display:none; position:fixed; inset:0; z-index:99; background:transparent; }
+#sidebar-backdrop.open { display:block; }
 
 /* Sync dot */
 .sync-dot { width:8px; height:8px; border-radius:50%; background:var(--gray-200); display:inline-block; margin-right:4px; }
@@ -274,9 +297,13 @@ const CONFIG = {
   <!-- Sidebar -->
   <nav id="sidebar">
     <div class="sidebar-header">
-      <img class="sidebar-logo" id="sidebar-crest" src="" alt="" style="display:none;">
-      <div class="org-name">Diocese of London</div>
-      <div class="app-name">Endowment Fund Manager</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img id="sidebar-crest" src="" alt="" style="display:none;height:42px;width:42px;object-fit:contain;flex-shrink:0;">
+        <div>
+          <div class="org-name">Diocese of London</div>
+          <div class="app-name">Endowment Fund Manager</div>
+        </div>
+      </div>
     </div>
     <div class="nav-section">
       <div class="nav-section-label">Overview</div>
@@ -305,6 +332,7 @@ const CONFIG = {
       <button class="btn-ghost btn-sm" onclick="signOut()">Sign out</button>
     </div>
   </nav>
+  <div id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
   <!-- Topbar -->
   <div id="topbar">
@@ -804,7 +832,7 @@ function renderApp() {
   document.getElementById('btn-new-contribution').style.display = isAdmin ? '' : 'none';
   // Nav
   document.querySelectorAll('.nav-item').forEach(el => {
-    el.addEventListener('click', () => navigateTo(el.dataset.page));
+    el.addEventListener('click', () => { navigateTo(el.dataset.page); if(window.innerWidth<=768) closeSidebar(); });
   });
   // Report fund type change
   document.getElementById('report-type').addEventListener('change', function() {
@@ -873,7 +901,16 @@ function renderCurrentPage(page) {
   else if (page === 'spending') renderSpendingPage();
 }
 
-function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+function toggleSidebar() {
+  const open = document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-backdrop').classList.toggle('open', open);
+  document.body.style.overflow = open ? 'hidden' : '';
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('open');
+  document.body.style.overflow = '';
+}
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
