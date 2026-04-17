@@ -274,7 +274,7 @@ const CONFIG = {
   <!-- Sidebar -->
   <nav id="sidebar">
     <div class="sidebar-header">
-      <img class="sidebar-logo" id="sidebar-crest" src="" alt="" onerror="this.style.display='none'">
+      <img class="sidebar-logo" id="sidebar-crest" src="" alt="" style="display:none;">
       <div class="org-name">Diocese of London</div>
       <div class="app-name">Endowment Fund Manager</div>
     </div>
@@ -702,6 +702,7 @@ let editingFundId = null, editingPoolId = null;
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  setCrestImages();
   if (CONFIG.supabaseUrl === 'YOUR_SUPABASE_URL') {
     document.getElementById('setup-screen').style.display = 'block';
     document.getElementById('setup-sql').textContent = SETUP_SQL;
@@ -1170,17 +1171,38 @@ function setPayoutTab(tab, btn) {
 
 function openPayoutRequestModal(prefillFundId) {
   document.getElementById('payout-modal-title').textContent = 'Request Payout';
+  const activeFunds = allFunds.filter(f=>f.status==='active');
+  const fundOptions = activeFunds.map(f => {
+    const p = getFundAnnualPayout(f);
+    const quarterly = r2(p.annual / 4);
+    return '<option value="' + f.id + '" data-quarterly="' + quarterly + '" data-rule="' + esc(p.rule) + '"' + (prefillFundId===f.id?' selected':'') + '>' + esc(f.name) + ' — ' + fmt(f.balance) + ' (qtrly: ' + fmt(quarterly) + ')</option>';
+  }).join('');
+  const initialFund = (prefillFundId ? allFunds.find(f=>f.id===prefillFundId) : activeFunds[0]);
+  const initialPayout = initialFund ? r2(getFundAnnualPayout(initialFund).annual / 4) : 0;
+  const initialRule = initialFund ? getFundAnnualPayout(initialFund).rule : '';
   document.getElementById('payout-modal-body').innerHTML =
-    '<div class="notice notice-info" style="margin-bottom:14px;">Payout requests require approval by a second admin before funds are disbursed.</div>' +
+    '<div class="notice notice-info" style="margin-bottom:14px;">Amount is pre-filled from the fund spending policy. You may adjust if needed. A second admin must approve before disbursement.</div>' +
     '<div class="form-grid">' +
-    '<div class="form-row full"><label>Fund *</label><select id="p-fund">' + allFunds.filter(f=>f.status==='active').map(f=>'<option value="'+f.id+'"'+(prefillFundId===f.id?' selected':'')+'>'+esc(f.name)+' ('+fmt(f.balance)+')</option>').join('') + '</select></div>' +
+    '<div class="form-row full"><label>Fund *</label><select id="p-fund" onchange="updatePayoutAmount()">' + fundOptions + '</select></div>' +
     '<div class="form-row"><label>Payee *</label><input id="p-payee" placeholder="Recipient name"></div>' +
-    '<div class="form-row"><label>Amount (CAD) *</label><input type="number" step="0.01" min="0" id="p-amount" placeholder="0.00"></div>' +
+    '<div class="form-row"><label>Amount (CAD) *</label>' +
+    '<input type="number" step="0.01" min="0" id="p-amount" value="' + initialPayout + '">' +
+    '<div id="p-amount-hint" class="text-muted" style="font-size:11px;margin-top:3px;">Based on: ' + esc(initialRule) + '</div></div>' +
     '<div class="form-row full"><label>Purpose / Description *</label><textarea id="p-purpose"></textarea></div>' +
     '</div>' +
     '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-payout\')">Cancel</button><button class="btn-primary" onclick="submitPayoutRequest()">Submit Request</button></div>';
   openModal('modal-payout');
 }
+
+function updatePayoutAmount() {
+  const sel = document.getElementById('p-fund');
+  const fund = allFunds.find(f=>f.id===sel.value);
+  if (!fund) return;
+  const p = getFundAnnualPayout(fund);
+  document.getElementById('p-amount').value = r2(p.annual / 4);
+  document.getElementById('p-amount-hint').textContent = 'Based on: ' + p.rule;
+}
+
 
 async function submitPayoutRequest() {
   const fundId = document.getElementById('p-fund').value;
@@ -1777,12 +1799,18 @@ document.querySelectorAll('.modal-overlay').forEach(o => {
 
 // ─── CREST ────────────────────────────────────────────────────────────────────
 function setCrestImages() {
-  const src = document.getElementById('crest-src').src;
-  if (!src || src === location.href) return;
-  ['auth-crest','sidebar-crest'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.src = src;
-  });
+  const srcEl = document.getElementById('crest-src');
+  if (!srcEl) return;
+  const apply = () => {
+    const src = srcEl.src;
+    if (!src || src === location.href) return;
+    ['auth-crest','sidebar-crest'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.src = src; el.style.display = 'block'; }
+    });
+  };
+  if (srcEl.complete) { apply(); }
+  else { srcEl.onload = apply; }
 }
 </script>
 </body>
