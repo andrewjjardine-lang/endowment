@@ -733,6 +733,7 @@ function setSyncDot(state) { const d=document.getElementById('sync-dot'); d.clas
 function showAuth() {
   document.getElementById('app').style.display = 'none';
   document.getElementById('auth-screen').style.display = 'flex';
+  setCrestImages();
   document.getElementById('auth-form-wrap').innerHTML =
     '<div class="form-row"><label>Email</label><input type="email" id="auth-email" placeholder="your@email.com" autocomplete="username"></div>' +
     '<div class="form-row"><label>Password</label><input type="password" id="auth-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')signIn()"></div>' +
@@ -809,6 +810,7 @@ function renderApp() {
     document.getElementById('report-fund-row').style.display = this.value === 'fund' ? '' : 'none';
   });
   document.getElementById('page-setup-sql').textContent = SETUP_SQL;
+  setCrestImages();
 }
 
 async function loadData() {
@@ -1611,29 +1613,36 @@ function copySetupSql() {
 
 // ─── SEED PLACEHOLDER FUNDS ──────────────────────────────────────────────────
 async function seedPlaceholderFunds() {
-  const labels = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  const fundDefs = [
+    { name: 'Fund A', balance: 2500000 },
+    { name: 'Fund B', balance: 500000 },
+    { name: 'Fund C', balance: 3000000 },
+    { name: 'Fund D', balance: 1500000 },
+    { name: 'Fund E', balance: 1300000 },
+    { name: 'Fund F', balance: 0 },
+    { name: 'Fund G', balance: 0 },
+    { name: 'Fund H', balance: 0 },
+    { name: 'Fund I', balance: 0 },
+    { name: 'Fund J', balance: 0 },
+    { name: 'Fund K', balance: 0 },
+    { name: 'Fund L', balance: 0 }
+  ];
   const existing = allFunds.map(f => f.name);
-  const toInsert = [];
-  for (const label of labels) {
-    const name = 'Fund ' + label;
-    if (!existing.includes(name)) {
-      toInsert.push({
-        name,
-        category: 'Endowment',
-        status: 'active',
-        balance: 0,
-        restrictions: null,
-        notes: 'Placeholder — update with fund details.',
-        created_by: 'system'
-      });
-    }
-  }
+  const toInsert = fundDefs.filter(f => !existing.includes(f.name)).map(f => ({
+    name: f.name,
+    category: 'Endowment',
+    status: 'active',
+    balance: f.balance,
+    restrictions: null,
+    notes: 'Placeholder — update with fund details.',
+    created_by: 'system'
+  }));
   if (!toInsert.length) { alert('Placeholder funds already exist.'); return; }
   const { error } = await sb.from('funds').insert(toInsert);
   if (error) { alert('Error seeding funds: ' + error.message); return; }
   await loadData();
   renderFundsTable();
-  alert(toInsert.length + ' placeholder funds created (Fund A through Fund L).');
+  alert(toInsert.length + ' placeholder funds created.');
 }
 
 
