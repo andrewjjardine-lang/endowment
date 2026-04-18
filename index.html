@@ -1829,8 +1829,8 @@ function openEditTxModal(txId) {
     '<div class="form-row full"><label>Reason for Edit *</label><textarea id="edit-reason" style="min-height:50px;" placeholder="Explain why this transaction needs to be changed"></textarea></div>' +
     '</div>' +
     '<div class="form-actions">' +
-    '<button class="btn-secondary" onclick="closeModal('modal-payout')">Cancel</button>' +
-    '<button class="btn-primary" onclick="submitEditRequest('' + txId + '')">Submit Edit Request</button>' +
+    '<button class="btn-secondary" onclick="closeModal(\'modal-payout\')">Cancel</button>' +
+    '<button class="btn-primary" onclick="submitEditRequest(\'' + txId + '\')">Submit Edit Request</button>' +
     '</div>';
   openModal('modal-payout');
 }
@@ -1876,8 +1876,8 @@ function openDeleteTxModal(txId) {
     '</div></div>' +
     '<div class="form-row"><label>Reason for Deletion *</label><textarea id="delete-reason" style="min-height:60px;" placeholder="Explain why this transaction should be deleted"></textarea></div>' +
     '<div class="form-actions">' +
-    '<button class="btn-secondary" onclick="closeModal('modal-payout')">Cancel</button>' +
-    '<button class="btn-danger" onclick="submitDeleteRequest('' + txId + '')">Submit Deletion Request</button>' +
+    '<button class="btn-secondary" onclick="closeModal(\'modal-payout\')">Cancel</button>' +
+    '<button class="btn-danger" onclick="submitDeleteRequest(\'' + txId + '\')">Submit Deletion Request</button>' +
     '</div>';
   openModal('modal-payout');
 }
@@ -1942,9 +1942,9 @@ function openReviewCR(id) {
     '<div class="form-row"><label>Review Note (optional)</label><textarea id="cr-review-note" style="min-height:50px;"></textarea></div>' +
     '<div class="form-actions">' +
     (req.requested_by !== currentUser.email ?
-      '<button class="btn-primary btn-sm" onclick="processCRDecision('' + id + '',true)" style="background:var(--green);">&#10003; Approve</button>' +
-      '<button class="btn-danger btn-sm" onclick="processCRDecision('' + id + '',false)">&#10005; Reject</button>' : '') +
-    '<button class="btn-secondary btn-sm" onclick="closeModal('modal-review-cr')">Cancel</button>' +
+      '<button class="btn-primary btn-sm" onclick="processCRDecision(\'' + id + '\',true)" style="background:var(--green);">&#10003; Approve</button>' +
+      '<button class="btn-danger btn-sm" onclick="processCRDecision(\'' + id + '\',false)">&#10005; Reject</button>' : '') +
+    '<button class="btn-secondary btn-sm" onclick="closeModal(\'modal-review-cr\')">Cancel</button>' +
     '</div>';
   openModal('modal-review-cr');
 }
