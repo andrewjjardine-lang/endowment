@@ -1966,13 +1966,15 @@ async function processCRDecision(id, approved) {
     const fund = tx ? allFunds.find(f=>f.id===tx.fund_id) : null;
 
     if (req.request_type === 'delete') {
-      // Delete the transaction and reverse its effect on fund balance
-      const { error: delErr } = await sb.from('fund_transactions').delete().eq('id', req.tx_id);
-      if (delErr) { alert('Delete error: ' + delErr.message); return; }
+      // First reverse the fund balance, then delete transaction (cascade removes change requests)
       if (fund && tx) {
         const newBal = r2(r2(fund.balance) - r2(tx.amount));
         await sb.from('funds').update({ balance: newBal }).eq('id', fund.id);
       }
+      // Delete change requests referencing this tx first, then the transaction
+      await sb.from('tx_change_requests').delete().eq('tx_id', req.tx_id);
+      const { error: delErr } = await sb.from('fund_transactions').delete().eq('id', req.tx_id);
+      if (delErr) { alert('Delete error: ' + delErr.message); return; }
     } else if (req.request_type === 'edit') {
       const p = req.proposed_data;
       // Apply the balance difference
