@@ -1872,7 +1872,7 @@ async function seedPlaceholderFunds() {
 let fundDetailChart = null;
 let currentFundChartRange = '12m';
 
-function setFundChartRange(range, fundId) {
+async function setFundChartRange(range, fundId) {
   currentFundChartRange = range;
   document.getElementById('chart-btn-12m').classList.toggle('active', range === '12m');
   document.getElementById('chart-btn-5y').classList.toggle('active', range === '5y');
@@ -1881,76 +1881,112 @@ function setFundChartRange(range, fundId) {
   renderFundDetailChart(fundId, range);
 }
 
-function renderFundDetailChart(fundId, range) {
+async function renderFundDetailChart(fundId, range) {
   range = range || currentFundChartRange;
-  const txs = allTransactions.filter(t => t.fund_id === fundId);
   const canvas = document.getElementById('fund-detail-chart');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
 
-  // Build period labels and running balance
-  const periods = [];
-  const balances = [];
-  const contributions = [];
-  const payouts = [];
+  const isMonthly = range === '12m';
+  const txs = allTransactions.filter(t => t.fund_id === fundId);
+
+  // Fetch snapshots for this fund from DB
+  const { data: snaps } = await sb.from('fund_balance_snapshots')
+    .select('snapshot_date, balance')
+    .eq('fund_id', fundId)
+    .order('snapshot_date')
+    .limit(100000);
+
+  const snapMap = {};
+  (snaps || []).forEach(s => { snapMap[s.snapshot_date] = r2(s.balance); });
 
   const now = new Date();
-  const numPeriods = range === '12m' ? 12 : 20; // 20 quarters = 5 years
-  const isMonthly = range === '12m';
+  const labels = [], balances = [], contributions = [], payouts = [];
 
-  // Calculate opening balance (current balance minus all transactions)
-  const totalTxAmount = txs.reduce((s, t) => s + r2(t.amount), 0);
-  let runningBal = r2(r2(allFunds.find(f=>f.id===fundId)?.balance || 0) - totalTxAmount);
+  if (isMonthly) {
+    // 12 months — use transactions to build monthly running balance from snapshots
+    // Find closest snapshot before 12 months ago as starting point
+    const cutoff = new Date(now.getFullYear(), now.getMonth() - 12, 1);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
 
-  // Build a map of txs by period
-  const txByPeriod = {};
-  txs.forEach(t => {
-    let key;
-    if (isMonthly) {
-      key = (t.tx_date || '').slice(0, 7); // YYYY-MM
-    } else {
-      const d = new Date(t.tx_date + 'T00:00:00');
-      const q = Math.floor(d.getMonth() / 3);
-      key = d.getFullYear() + '-Q' + (q + 1);
-    }
-    if (!txByPeriod[key]) txByPeriod[key] = { contrib: 0, payout: 0, other: 0 };
-    if (t.tx_type === 'Contribution') txByPeriod[key].contrib += r2(t.amount);
-    else if (t.tx_type === 'Payout') txByPeriod[key].payout += r2(t.amount);
-    else txByPeriod[key].other += r2(t.amount);
-  });
+    // Get all snapshots up to cutoff as starting balance
+    const priorSnaps = (snaps||[]).filter(s => s.snapshot_date <= cutoffStr);
+    let startBal = priorSnaps.length ? r2(priorSnaps[priorSnaps.length-1].balance) : 0;
 
-  // Generate period labels oldest to newest
-  const periodKeys = [];
-  for (let i = numPeriods - 1; i >= 0; i--) {
-    if (isMonthly) {
+    // Build monthly tx map
+    const txByMonth = {};
+    txs.forEach(t => {
+      const key = (t.tx_date||'').slice(0,7);
+      if (!txByMonth[key]) txByMonth[key] = { contrib:0, payout:0 };
+      if (t.tx_type === 'Contribution') txByMonth[key].contrib += r2(t.amount);
+      else if (t.tx_type === 'Payout') txByMonth[key].payout += Math.abs(r2(t.amount));
+    });
+
+    let bal = startBal;
+    for (let i = 11; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      periodKeys.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
-    } else {
+      const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+      const mo = txByMonth[key] || { contrib:0, payout:0 };
+      bal = r2(bal + mo.contrib - mo.payout);
+      const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+      labels.push(monthName + ' ' + String(d.getFullYear()).slice(2));
+      balances.push(bal);
+      contributions.push(mo.contrib);
+      payouts.push(mo.payout);
+    }
+  } else {
+    // 5 years — use quarterly snapshots directly (this is the accurate historical data)
+    // Generate last 20 quarter-end dates
+    const quarterEnds = [];
+    for (let i = 19; i >= 0; i--) {
       const d = new Date(now);
       d.setMonth(d.getMonth() - i * 3);
-      const q = Math.floor(d.getMonth() / 3);
-      periodKeys.push(d.getFullYear() + '-Q' + (q + 1));
+      const qMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
+      const qEnd = new Date(d.getFullYear(), qMonth + 1, 0);
+      quarterEnds.push(qEnd);
     }
+
+    // Build quarterly tx map
+    const txByQuarter = {};
+    txs.forEach(t => {
+      if (!t.tx_date) return;
+      const d = new Date(t.tx_date + 'T00:00:00');
+      const qKey = d.getFullYear() + '-Q' + (Math.floor(d.getMonth()/3)+1);
+      if (!txByQuarter[qKey]) txByQuarter[qKey] = { contrib:0, payout:0 };
+      if (t.tx_type === 'Contribution') txByQuarter[qKey].contrib += r2(t.amount);
+      else if (t.tx_type === 'Payout') txByQuarter[qKey].payout += Math.abs(r2(t.amount));
+    });
+
+    quarterEnds.forEach(qEnd => {
+      const dateStr = qEnd.toISOString().slice(0,10);
+      const qKey = qEnd.getFullYear() + '-Q' + (Math.floor(qEnd.getMonth()/3)+1);
+      const label = qEnd.getFullYear() + ' Q' + (Math.floor(qEnd.getMonth()/3)+1);
+
+      // Use snapshot for this quarter if available, otherwise interpolate from neighbours
+      let bal = null;
+      if (snapMap[dateStr] !== undefined) {
+        bal = snapMap[dateStr];
+      } else {
+        // Find nearest snapshots before and after
+        const allDates = Object.keys(snapMap).sort();
+        const before = allDates.filter(d => d <= dateStr).pop();
+        const after = allDates.filter(d => d > dateStr).shift();
+        if (before && after) {
+          const t1 = new Date(before).getTime(), t2 = new Date(after).getTime(), t0 = qEnd.getTime();
+          const ratio = (t0-t1)/(t2-t1);
+          bal = r2(snapMap[before] + (snapMap[after]-snapMap[before]) * ratio);
+        } else if (before) { bal = snapMap[before]; }
+        else if (after) { bal = snapMap[after]; }
+        else { bal = r2(allFunds.find(f=>f.id===fundId)?.balance||0); }
+      }
+
+      const qtx = txByQuarter[qKey] || { contrib:0, payout:0 };
+      labels.push(label);
+      balances.push(bal);
+      contributions.push(qtx.contrib);
+      payouts.push(qtx.payout);
+    });
   }
-
-  // Walk forward building running balance
-  let bal = runningBal;
-  periodKeys.forEach(key => {
-    const p = txByPeriod[key] || { contrib: 0, payout: 0, other: 0 };
-    bal = r2(bal + p.contrib + p.payout + p.other);
-    balances.push(bal);
-    contributions.push(p.contrib);
-    payouts.push(Math.abs(p.payout));
-  });
-
-  // Format labels
-  const labels = periodKeys.map(k => {
-    if (isMonthly) {
-      const [y, m] = k.split('-');
-      return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1] + ' ' + y.slice(2);
-    }
-    return k.replace('-', ' ');
-  });
 
   if (fundDetailChart) fundDetailChart.destroy();
   fundDetailChart = new Chart(ctx, {
@@ -1997,7 +2033,7 @@ function renderFundDetailChart(fundId, range) {
         legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10 } },
         tooltip: {
           callbacks: {
-            label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y)
+            label: context => ' ' + context.dataset.label + ': ' + fmt(context.parsed.y)
           }
         }
       },
@@ -2013,10 +2049,7 @@ function renderFundDetailChart(fundId, range) {
         y2: {
           position: 'right',
           grid: { drawOnChartArea: false },
-          ticks: {
-            font: { size: 10 },
-            callback: v => '$' + Math.round(v/1000)+'k'
-          }
+          ticks: { font: { size: 10 }, callback: v => '$' + Math.round(v/1000)+'k' }
         }
       }
     }
