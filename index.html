@@ -1796,7 +1796,7 @@ function renderCRTable() {
       '<td class="text-muted">' + esc(r.requested_by||'—') + '</td>' +
       '<td>' + fmtDatetime(r.created_at) + '</td>' +
       '<td><span class="badge ' + payoutBadge(r.status) + '">' + esc(r.status) + '</span></td>' +
-      '<td>' + (isAdmin && r.status==='pending' ? '<button class="btn-gold btn-sm" onclick="openReviewCR('' + r.id + '')">Review</button>' : '') + '</td>' +
+      '<td>' + (isAdmin && r.status==='pending' ? '<button class="btn-gold btn-sm" onclick="openReviewCR(\'' + r.id + '\')">Review</button>' : '') + '</td>' +
       '</tr>';
   }).join('');
 }
