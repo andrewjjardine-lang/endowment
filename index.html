@@ -1239,6 +1239,20 @@ async function openFundDetail(fundId) {
   ledger.innerHTML = '<div class="card-header"><h3>Transaction Ledger</h3>' +
     (currentProfile.role==='admin' ? '<div style="display:flex;gap:6px;"><button class="btn-primary btn-sm" onclick="openContributionModal(\'' + fund.id + '\')">+ Contribution</button><button class="btn-primary btn-sm" onclick="openPayoutRequestModal(\'' + fund.id + '\')">+ Payout</button></div>' : '') +
     '</div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Donor / Source</th><th class="td-right">Amount</th><th>Note</th><th>Posted By</th><th></th></tr></thead><tbody>' + txHtml + '</tbody></table></div>';
+  // Chart section
+  const chartSection = document.createElement('div');
+  chartSection.id = 'fund-chart-section';
+  chartSection.className = 'card';
+  chartSection.style.marginBottom = '16px';
+  chartSection.innerHTML =
+    '<div class="card-header" style="gap:12px;">' +
+    '<h3 id="fund-chart-title">Fund Balance — Last 12 Months</h3>' +
+    '<div style="display:flex;gap:6px;">' +
+    '<button class="filter-btn active" id="chart-btn-12m" onclick="setFundChartRange(\'12m\', '' + fund.id + '')">12 Months</button>' +
+    '<button class="filter-btn" id="chart-btn-5y" onclick="setFundChartRange(\'5y\', '' + fund.id + '')">5 Years</button>' +
+    '</div></div>' +
+    '<div class="card-body"><canvas id="fund-detail-chart" height="120"></canvas></div>';
+  page.appendChild(chartSection);
   page.appendChild(ledger);
   // Payouts tab
   const payTab = document.createElement('div');
@@ -1254,6 +1268,7 @@ async function openFundDetail(fundId) {
   payTab.innerHTML = '<div class="card"><div class="card-header"><h3>Payout Requests</h3></div><div class="table-wrap"><table><thead><tr><th>Payee</th><th class="td-right">Amount</th><th>Purpose</th><th>Status</th><th>Date</th></tr></thead><tbody>' + pyHtml + '</tbody></table></div></div>';
   page.appendChild(payTab);
   navigateTo('fund-detail');
+  renderFundDetailChart(fundId, '12m');
 }
 
 function showFundTab(tab, btn) {
@@ -1851,6 +1866,162 @@ async function seedPlaceholderFunds() {
 }
 
 
+
+
+// ─── FUND DETAIL CHART ────────────────────────────────────────────────────────
+let fundDetailChart = null;
+let currentFundChartRange = '12m';
+
+function setFundChartRange(range, fundId) {
+  currentFundChartRange = range;
+  document.getElementById('chart-btn-12m').classList.toggle('active', range === '12m');
+  document.getElementById('chart-btn-5y').classList.toggle('active', range === '5y');
+  document.getElementById('fund-chart-title').textContent =
+    range === '12m' ? 'Fund Balance — Last 12 Months' : 'Fund Balance — Last 5 Years';
+  renderFundDetailChart(fundId, range);
+}
+
+function renderFundDetailChart(fundId, range) {
+  range = range || currentFundChartRange;
+  const txs = allTransactions.filter(t => t.fund_id === fundId);
+  const canvas = document.getElementById('fund-detail-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  // Build period labels and running balance
+  const periods = [];
+  const balances = [];
+  const contributions = [];
+  const payouts = [];
+
+  const now = new Date();
+  const numPeriods = range === '12m' ? 12 : 20; // 20 quarters = 5 years
+  const isMonthly = range === '12m';
+
+  // Calculate opening balance (current balance minus all transactions)
+  const totalTxAmount = txs.reduce((s, t) => s + r2(t.amount), 0);
+  let runningBal = r2(r2(allFunds.find(f=>f.id===fundId)?.balance || 0) - totalTxAmount);
+
+  // Build a map of txs by period
+  const txByPeriod = {};
+  txs.forEach(t => {
+    let key;
+    if (isMonthly) {
+      key = (t.tx_date || '').slice(0, 7); // YYYY-MM
+    } else {
+      const d = new Date(t.tx_date + 'T00:00:00');
+      const q = Math.floor(d.getMonth() / 3);
+      key = d.getFullYear() + '-Q' + (q + 1);
+    }
+    if (!txByPeriod[key]) txByPeriod[key] = { contrib: 0, payout: 0, other: 0 };
+    if (t.tx_type === 'Contribution') txByPeriod[key].contrib += r2(t.amount);
+    else if (t.tx_type === 'Payout') txByPeriod[key].payout += r2(t.amount);
+    else txByPeriod[key].other += r2(t.amount);
+  });
+
+  // Generate period labels oldest to newest
+  const periodKeys = [];
+  for (let i = numPeriods - 1; i >= 0; i--) {
+    if (isMonthly) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      periodKeys.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+    } else {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - i * 3);
+      const q = Math.floor(d.getMonth() / 3);
+      periodKeys.push(d.getFullYear() + '-Q' + (q + 1));
+    }
+  }
+
+  // Walk forward building running balance
+  let bal = runningBal;
+  periodKeys.forEach(key => {
+    const p = txByPeriod[key] || { contrib: 0, payout: 0, other: 0 };
+    bal = r2(bal + p.contrib + p.payout + p.other);
+    balances.push(bal);
+    contributions.push(p.contrib);
+    payouts.push(Math.abs(p.payout));
+  });
+
+  // Format labels
+  const labels = periodKeys.map(k => {
+    if (isMonthly) {
+      const [y, m] = k.split('-');
+      return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1] + ' ' + y.slice(2);
+    }
+    return k.replace('-', ' ');
+  });
+
+  if (fundDetailChart) fundDetailChart.destroy();
+  fundDetailChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Balance',
+          data: balances,
+          borderColor: '#1a2744',
+          backgroundColor: 'rgba(26,39,68,0.08)',
+          borderWidth: 2.5,
+          pointRadius: 3,
+          pointBackgroundColor: '#1a2744',
+          fill: true,
+          tension: 0.3,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Contributions',
+          data: contributions,
+          borderColor: '#2d6a4f',
+          backgroundColor: 'rgba(45,106,79,0.7)',
+          borderWidth: 0,
+          type: 'bar',
+          yAxisID: 'y2'
+        },
+        {
+          label: 'Payouts',
+          data: payouts,
+          borderColor: '#8b1a1a',
+          backgroundColor: 'rgba(139,26,26,0.7)',
+          borderWidth: 0,
+          type: 'bar',
+          yAxisID: 'y2'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y)
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 } } },
+        y: {
+          position: 'left',
+          ticks: {
+            font: { size: 10 },
+            callback: v => '$' + (Math.abs(v) >= 1000000 ? (v/1000000).toFixed(1)+'M' : Math.round(v/1000)+'k')
+          }
+        },
+        y2: {
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          ticks: {
+            font: { size: 10 },
+            callback: v => '$' + Math.round(v/1000)+'k'
+          }
+        }
+      }
+    }
+  });
+}
 
 // ─── TX CHANGE REQUESTS ───────────────────────────────────────────────────────
 let allChangeRequests = [];
