@@ -1248,8 +1248,8 @@ async function openFundDetail(fundId) {
     '<div class="card-header" style="gap:12px;">' +
     '<h3 id="fund-chart-title">Fund Balance — Last 12 Months</h3>' +
     '<div style="display:flex;gap:6px;">' +
-    '<button class="filter-btn active" id="chart-btn-12m" onclick="setFundChartRange(\'12m\', '' + fund.id + '')">12 Months</button>' +
-    '<button class="filter-btn" id="chart-btn-5y" onclick="setFundChartRange(\'5y\', '' + fund.id + '')">5 Years</button>' +
+    '<button class="filter-btn active" id="chart-btn-12m" onclick="setFundChartRange(\'12m\', \'' + fund.id + '\')">12 Months</button>' +
+    '<button class="filter-btn" id="chart-btn-5y" onclick="setFundChartRange(\'5y\', \'' + fund.id + '\')">5 Years</button>' +
     '</div></div>' +
     '<div class="card-body"><canvas id="fund-detail-chart" height="120"></canvas></div>';
   page.appendChild(chartSection);
