@@ -838,8 +838,88 @@ function showAuthMsg(msg, isError) {
 async function signIn() {
   const email = document.getElementById('auth-email').value.trim();
   const pass = document.getElementById('auth-pass').value;
-  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
-  if (error) showAuthMsg(error.message, true);
+  if (!email || !pass) return showAuthMsg('Please enter your email and password.', true);
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) { showAuthMsg(error.message, true); return; }
+  // Check if MFA is required
+  const { data: aalData } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aalData?.nextLevel === 'aal2' && aalData?.nextLevel !== aalData?.currentLevel) {
+    // MFA challenge required
+    showMFAChallenge();
+  } else if (aalData?.currentLevel === 'aal1') {
+    // Logged in but no MFA enrolled — force enrollment
+    const { data: factors } = await sb.auth.mfa.listFactors();
+    if (!factors?.totp?.length) {
+      showMFAEnroll();
+    }
+  }
+  // If aal2 already satisfied, onAuthStateChange will fire and boot normally
+}
+
+async function showMFAChallenge() {
+  // Get the challenge
+  const { data: challengeData, error: challengeErr } = await sb.auth.mfa.challenge({ factorId: await getMFAFactorId() });
+  if (challengeErr) { showAuthMsg(challengeErr.message, true); return; }
+  const challengeId = challengeData.id;
+  document.getElementById('auth-form-wrap').innerHTML =
+    '<p style="font-size:13px;color:var(--gray-600);margin-bottom:14px;">Enter the 6-digit code from your authenticator app.</p>' +
+    '<div class="form-row"><label>Authentication Code</label>' +
+    '<input type="text" id="mfa-code" maxlength="6" placeholder="000000" autocomplete="one-time-code" style="font-size:22px;letter-spacing:.2em;text-align:center;" oninput="if(this.value.length===6) verifyMFA('' + challengeId + '')"></div>' +
+    '<div id="mfa-error" style="color:var(--red);font-size:12px;margin-bottom:8px;display:none;"></div>' +
+    '<button class="btn-primary" style="width:100%;padding:10px;" onclick="verifyMFA('' + challengeId + '')">Verify</button>' +
+    '<div class="auth-link"><a href="#" onclick="showAuth();sb.auth.signOut();return false;">Back to sign in</a></div>';
+}
+
+async function getMFAFactorId() {
+  const { data } = await sb.auth.mfa.listFactors();
+  return data?.totp?.[0]?.id;
+}
+
+async function verifyMFA(challengeId) {
+  const code = (document.getElementById('mfa-code').value||'').trim();
+  if (code.length !== 6) return;
+  const factorId = await getMFAFactorId();
+  const { error } = await sb.auth.mfa.verify({ factorId, challengeId, code });
+  if (error) {
+    const el = document.getElementById('mfa-error');
+    el.textContent = 'Invalid code. Please try again.';
+    el.style.display = 'block';
+    document.getElementById('mfa-code').value = '';
+    return;
+  }
+  // MFA verified — onAuthStateChange will fire and boot the app
+}
+
+async function showMFAEnroll() {
+  const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp', issuer: 'Diocese of London Endowment' });
+  if (error) { showAuthMsg(error.message, true); return; }
+  const qrCode = data.totp.qr_code;
+  const secret = data.totp.secret;
+  const factorId = data.id;
+  document.getElementById('auth-form-wrap').innerHTML =
+    '<div class="notice notice-info" style="margin-bottom:14px;font-size:12px;">Multi-factor authentication is required. Scan the QR code with <strong>Google Authenticator</strong>, <strong>Authy</strong>, or any TOTP app, then enter the 6-digit code to complete setup.</div>' +
+    '<div style="text-align:center;margin-bottom:14px;"><img src="' + qrCode + '" style="width:180px;height:180px;border:4px solid var(--gray-100);border-radius:8px;"></div>' +
+    '<div style="text-align:center;margin-bottom:14px;"><div class="text-muted" style="font-size:11px;margin-bottom:4px;">Or enter this key manually:</div><code style="font-size:13px;background:var(--gray-50);padding:4px 10px;border-radius:4px;letter-spacing:.1em;">' + secret + '</code></div>' +
+    '<div class="form-row"><label>Verify Setup — Enter 6-digit code</label>' +
+    '<input type="text" id="enroll-code" maxlength="6" placeholder="000000" autocomplete="one-time-code" style="font-size:22px;letter-spacing:.2em;text-align:center;"></div>' +
+    '<div id="enroll-error" style="color:var(--red);font-size:12px;margin-bottom:8px;display:none;"></div>' +
+    '<button class="btn-primary" style="width:100%;padding:10px;" onclick="completeMFAEnroll('' + factorId + '')">Complete Setup</button>' +
+    '<div class="auth-link"><a href="#" onclick="showAuth();sb.auth.signOut();return false;">Cancel &amp; sign out</a></div>';
+}
+
+async function completeMFAEnroll(factorId) {
+  const code = (document.getElementById('enroll-code').value||'').trim();
+  if (code.length !== 6) return;
+  const { data: challengeData, error: cErr } = await sb.auth.mfa.challenge({ factorId });
+  if (cErr) { document.getElementById('enroll-error').textContent = cErr.message; document.getElementById('enroll-error').style.display='block'; return; }
+  const { error: vErr } = await sb.auth.mfa.verify({ factorId, challengeId: challengeData.id, code });
+  if (vErr) {
+    document.getElementById('enroll-error').textContent = 'Invalid code. Please try again.';
+    document.getElementById('enroll-error').style.display = 'block';
+    document.getElementById('enroll-code').value = '';
+    return;
+  }
+  // Enrolled and verified — onAuthStateChange fires and boots app
 }
 
 async function signOut() {
@@ -1639,7 +1719,20 @@ function openInviteModal() {
 }
 
 // ─── ACCOUNT SETTINGS ────────────────────────────────────────────────────────
-function showAccountSettings() {
+async function showAccountSettings() {
+  const { data: factors } = await sb.auth.mfa.listFactors();
+  const hasMFA = factors?.totp?.length > 0;
+  const mfaSection =
+    '<hr class="divider">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
+    '<strong style="font-size:13px;">Two-Factor Authentication</strong>' +
+    '<span class="badge ' + (hasMFA ? 'badge-green' : 'badge-red') + '">' + (hasMFA ? 'Enabled' : 'Not set up') + '</span>' +
+    '</div>' +
+    '<p class="text-muted" style="font-size:12px;margin-bottom:10px;">' + (hasMFA ? 'MFA is active. You can remove it below (not recommended).' : 'Set up an authenticator app to secure your account.') + '</p>' +
+    (hasMFA
+      ? '<button class="btn-danger btn-sm" onclick="disableMFA()">Remove MFA</button>'
+      : '<button class="btn-primary btn-sm" onclick="closeModal(\'modal-account\');showMFAEnroll()">Set Up MFA</button>') +
+    '<hr class="divider">';
   document.getElementById('account-modal-body').innerHTML =
     '<div style="margin-bottom:14px;">' +
     '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Email</div>' +
@@ -1649,7 +1742,7 @@ function showAccountSettings() {
     '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Role</div>' +
     '<div><span class="badge badge-navy">' + esc(currentProfile.role) + '</span></div>' +
     '</div>' +
-    '<hr class="divider">' +
+    mfaSection +
     '<div><strong style="font-size:13px;">Change Password</strong></div>' +
     '<div class="form-row" style="margin-top:10px;"><label>New Password (min 6 chars)</label><input type="password" id="new-pass" placeholder="••••••••"></div>' +
     '<div class="form-row"><label>Confirm Password</label><input type="password" id="confirm-pass" placeholder="••••••••"></div>' +
@@ -1657,6 +1750,7 @@ function showAccountSettings() {
     '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-account\')">Close</button><button class="btn-primary" onclick="changePassword()">Update Password</button></div>';
   openModal('modal-account');
 }
+
 
 async function changePassword() {
   const p1 = document.getElementById('new-pass').value;
