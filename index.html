@@ -320,6 +320,7 @@ const CONFIG = {
     </div>
     <div class="nav-section" id="admin-nav">
       <div class="nav-section-label">Admin</div>
+      <div class="nav-item" data-page="change-requests"><span class="nav-icon">&#9651;</span> Change Requests <span id="cr-badge" style="display:none;background:var(--red);color:#fff;border-radius:99px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:4px;"></span></div>
       <div class="nav-item" data-page="users"><span class="nav-icon">&#9650;</span> User Management</div>
       <div class="nav-item" data-page="import"><span class="nav-icon">&#8645;</span> Import Data</div>
       <div class="nav-item" data-page="setup"><span class="nav-icon">&#9881;</span> Setup &amp; Backups</div>
@@ -418,7 +419,7 @@ const CONFIG = {
       </div>
       <div class="card">
         <div class="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Fund</th><th>Donor / Source</th><th>Amount</th><th>Note</th><th>Posted By</th></tr></thead>
+          <thead><tr><th>Date</th><th>Fund</th><th>Donor / Source</th><th>Amount</th><th>Note</th><th>Posted By</th><th></th></tr></thead>
           <tbody id="contrib-tbody"><tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
         </table></div>
       </div>
@@ -496,6 +497,26 @@ const CONFIG = {
       <div id="report-output"></div>
     </div>
 
+
+
+    <!-- CHANGE REQUESTS -->
+    <div class="page" id="page-change-requests">
+      <div class="page-header">
+        <div><h2>Change Requests</h2><div class="page-sub">Transaction edits and deletions pending approval</div></div>
+      </div>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="setCRTab('pending',this)">Pending</button>
+        <button class="tab-btn" onclick="setCRTab('approved',this)">Approved</button>
+        <button class="tab-btn" onclick="setCRTab('rejected',this)">Rejected</button>
+        <button class="tab-btn" onclick="setCRTab('all',this)">All</button>
+      </div>
+      <div class="card">
+        <div class="table-wrap"><table>
+          <thead><tr><th>Type</th><th>Fund</th><th>Transaction</th><th>Reason</th><th>Requested By</th><th>Date</th><th>Status</th><th></th></tr></thead>
+          <tbody id="cr-tbody"><tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
 
     <!-- SPENDING POLICY -->
     <div class="page" id="page-spending">
@@ -586,6 +607,7 @@ const CONFIG = {
 <div class="modal-overlay" id="modal-return"><div class="modal modal-lg"><div class="modal-header"><h3>Post Investment Return</h3><button class="modal-close" onclick="closeModal('modal-return')">&times;</button></div><div class="modal-body" id="return-modal-body"></div></div></div>
 <div class="modal-overlay" id="modal-account"><div class="modal"><div class="modal-header"><h3>Account Settings</h3><button class="modal-close" onclick="closeModal('modal-account')">&times;</button></div><div class="modal-body" id="account-modal-body"></div></div></div>
 <div class="modal-overlay" id="modal-invite"><div class="modal"><div class="modal-header"><h3>Invite User</h3><button class="modal-close" onclick="closeModal('modal-invite')">&times;</button></div><div class="modal-body" id="invite-modal-body"></div></div></div>
+<div class="modal-overlay" id="modal-review-cr"><div class="modal modal-lg"><div class="modal-header"><h3 id="cr-modal-title">Review Change Request</h3><button class="modal-close" onclick="closeModal('modal-review-cr')">&times;</button></div><div class="modal-body" id="cr-modal-body"></div></div></div>
 <div class="modal-overlay" id="modal-review-payout"><div class="modal"><div class="modal-header"><h3>Review Payout Request</h3><button class="modal-close" onclick="closeModal('modal-review-payout')">&times;</button></div><div class="modal-body" id="review-payout-body"></div></div></div>
 
 <script>
@@ -715,6 +737,27 @@ create policy "auth_only" on payout_requests for all using (auth.role() = 'authe
 create policy "auth_only" on pool_returns for all using (auth.role() = 'authenticated');
 create policy "auth_only" on return_allocations for all using (auth.role() = 'authenticated');
 create policy "auth_only" on user_profiles for all using (auth.role() = 'authenticated');
+
+-- Transaction change requests (edit/delete approval queue)
+create table if not exists tx_change_requests (
+  id uuid primary key default gen_random_uuid(),
+  request_type text not null,
+  tx_id uuid not null references fund_transactions(id),
+  current_data jsonb not null,
+  proposed_data jsonb,
+  reason text,
+  requested_by text not null,
+  status text not null default 'pending',
+  reviewed_by text,
+  reviewed_at timestamptz,
+  review_note text,
+  created_at timestamptz default now()
+);
+-- request_type: 'edit' or 'delete'
+-- status: 'pending', 'approved', 'rejected'
+
+alter table tx_change_requests enable row level security;
+create policy "auth_only" on tx_change_requests for all using (auth.role() = 'authenticated');
 
 -- Raise row cap
 alter role authenticator set pgrst.db_max_rows to '100000';
@@ -859,6 +902,7 @@ async function loadData() {
     const sel = document.getElementById('report-fund-id');
     sel.innerHTML = allFunds.map(f => '<option value="' + f.id + '">' + esc(f.name) + '</option>').join('');
     setSyncDot('ok');
+    await loadChangeRequests();
   } catch(e) { setSyncDot('error'); console.error(e); }
 }
 
@@ -899,6 +943,7 @@ function renderCurrentPage(page) {
   else if (page === 'pools') renderPoolsGrid();
   else if (page === 'users') loadUsers();
   else if (page === 'spending') renderSpendingPage();
+  else if (page === 'change-requests') { loadChangeRequests().then(renderCRTable); }
 }
 
 function toggleSidebar() {
@@ -1106,11 +1151,14 @@ async function openFundDetail(fundId) {
     '<td class="td-right" style="font-weight:500;color:' + (t.amount>=0?'var(--green)':'var(--red)') + '">' + fmt(t.amount) + '</td>' +
     '<td>' + esc(t.note||'—') + '</td>' +
     '<td class="text-muted">' + esc(t.created_by||'—') + '</td>' +
-    '</tr>'
-  ).join('') : '<tr><td colspan="6" class="text-center text-muted" style="padding:20px;">No transactions</td></tr>';
+    '<td style="white-space:nowrap;">' +
+    (currentProfile.role==='admin' ? '<button class="btn-ghost btn-sm" style="margin-right:4px;" onclick="openEditTxModal(\''+t.id+'\')" >Edit</button>' : '') +
+    (currentProfile.role==='admin' ? '<button class="btn-danger btn-sm" onclick="openDeleteTxModal(\''+t.id+'\')" >Delete</button>' : '') +
+    '</td></tr>'
+  ).join('') : '<tr><td colspan="7" class="text-center text-muted" style="padding:20px;">No transactions</td></tr>';
   ledger.innerHTML = '<div class="card-header"><h3>Transaction Ledger</h3>' +
     (currentProfile.role==='admin' ? '<div style="display:flex;gap:6px;"><button class="btn-primary btn-sm" onclick="openContributionModal(\'' + fund.id + '\')">+ Contribution</button><button class="btn-primary btn-sm" onclick="openPayoutRequestModal(\'' + fund.id + '\')">+ Payout</button></div>' : '') +
-    '</div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Donor / Source</th><th class="td-right">Amount</th><th>Note</th><th>Posted By</th></tr></thead><tbody>' + txHtml + '</tbody></table></div>';
+    '</div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Donor / Source</th><th class="td-right">Amount</th><th>Note</th><th>Posted By</th><th></th></tr></thead><tbody>' + txHtml + '</tbody></table></div>';
   page.appendChild(ledger);
   // Payouts tab
   const payTab = document.createElement('div');
@@ -1194,7 +1242,11 @@ function renderContribTable() {
     '<td>' + esc(t.donor_source||'—') + '</td>' +
     '<td class="td-right" style="color:var(--green);font-weight:500;">' + fmt(t.amount) + '</td>' +
     '<td>' + esc(t.note||'—') + '</td>' +
-    '<td class="text-muted">' + esc(t.created_by||'—') + '</td></tr>'
+    '<td class="text-muted">' + esc(t.created_by||'—') + '</td>' +
+    '<td style="white-space:nowrap;">' +
+    (currentProfile.role==='admin' ? '<button class="btn-ghost btn-sm" style="margin-right:4px;" onclick="openEditTxModal(\''+t.id+'\')" >Edit</button>' : '') +
+    (currentProfile.role==='admin' ? '<button class="btn-danger btn-sm" onclick="openDeleteTxModal(\''+t.id+'\')">Delete</button>' : '') +
+    '</td></tr>'
   ).join('');
 }
 
@@ -1704,6 +1756,245 @@ async function seedPlaceholderFunds() {
   alert(toInsert.length + ' placeholder funds created.');
 }
 
+
+
+// ─── TX CHANGE REQUESTS ───────────────────────────────────────────────────────
+let allChangeRequests = [];
+let currentCRTab = 'pending';
+
+async function loadChangeRequests() {
+  const { data } = await sb.from('tx_change_requests').select('*, tx:fund_transactions(tx_date,tx_type,amount,note,fund_id,donor_source)').order('created_at', {ascending:false}).limit(100000);
+  allChangeRequests = data || [];
+  // Update badge
+  const pending = allChangeRequests.filter(r=>r.status==='pending').length;
+  const badge = document.getElementById('cr-badge');
+  if (badge) { badge.textContent = pending; badge.style.display = pending ? 'inline' : 'none'; }
+}
+
+function setCRTab(tab, btn) {
+  currentCRTab = tab;
+  document.querySelectorAll('#page-change-requests .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCRTable();
+}
+
+function renderCRTable() {
+  let reqs = allChangeRequests;
+  if (currentCRTab !== 'all') reqs = reqs.filter(r=>r.status===currentCRTab);
+  const tbody = document.getElementById('cr-tbody');
+  const isAdmin = currentProfile.role === 'admin';
+  if (!reqs.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:20px;">No requests</td></tr>'; return; }
+  tbody.innerHTML = reqs.map(r => {
+    const tx = r.tx || {};
+    const fund = allFunds.find(f=>f.id===tx.fund_id);
+    const txDesc = [fmtDate(tx.tx_date), tx.tx_type, fmt(tx.amount)].filter(Boolean).join(' · ');
+    return '<tr>' +
+      '<td><span class="badge ' + (r.request_type==='delete'?'badge-red':'badge-amber') + '">' + esc(r.request_type) + '</span></td>' +
+      '<td>' + esc(fund?.name||'—') + '</td>' +
+      '<td class="text-muted" style="font-size:12px;">' + esc(txDesc) + '</td>' +
+      '<td>' + esc(r.reason||'—') + '</td>' +
+      '<td class="text-muted">' + esc(r.requested_by||'—') + '</td>' +
+      '<td>' + fmtDatetime(r.created_at) + '</td>' +
+      '<td><span class="badge ' + payoutBadge(r.status) + '">' + esc(r.status) + '</span></td>' +
+      '<td>' + (isAdmin && r.status==='pending' ? '<button class="btn-gold btn-sm" onclick="openReviewCR('' + r.id + '')">Review</button>' : '') + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function openEditTxModal(txId) {
+  const tx = allTransactions.find(t=>t.id===txId);
+  if (!tx) return;
+  const fund = allFunds.find(f=>f.id===tx.fund_id);
+  // Build a modal inline — reuse modal-payout overlay with custom content
+  document.getElementById('payout-modal-title').textContent = 'Request Transaction Edit';
+  document.getElementById('payout-modal-body').innerHTML =
+    '<div class="notice notice-info" style="margin-bottom:14px;">Edits require approval by a second admin. The transaction will not change until approved.</div>' +
+    '<div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:12px;margin-bottom:14px;">' +
+    '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Current Transaction</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">' +
+    '<div><span class="text-muted">Fund:</span> ' + esc(fund?.name||'—') + '</div>' +
+    '<div><span class="text-muted">Date:</span> ' + fmtDate(tx.tx_date) + '</div>' +
+    '<div><span class="text-muted">Type:</span> ' + esc(tx.tx_type) + '</div>' +
+    '<div><span class="text-muted">Amount:</span> ' + fmt(tx.amount) + '</div>' +
+    '<div style="grid-column:1/-1;"><span class="text-muted">Note:</span> ' + esc(tx.note||'—') + '</div>' +
+    '</div></div>' +
+    '<div class="form-grid">' +
+    '<div class="form-row"><label>New Date</label><input type="date" id="edit-date" value="' + esc(tx.tx_date||'') + '"></div>' +
+    '<div class="form-row"><label>New Amount (CAD)</label><input type="number" step="0.01" id="edit-amount" value="' + r2(tx.amount) + '"></div>' +
+    '<div class="form-row"><label>New Type</label><select id="edit-type">' +
+    ['Contribution','Payout','Return Allocation','Return Correction'].map(t=>'<option value="'+t+'"'+(tx.tx_type===t?' selected':'')+'>'+t+'</option>').join('') +
+    '</select></div>' +
+    '<div class="form-row"><label>New Donor / Source</label><input id="edit-donor" value="' + esc(tx.donor_source||'') + '"></div>' +
+    '<div class="form-row full"><label>New Note</label><input id="edit-note" value="' + esc(tx.note||'') + '"></div>' +
+    '<div class="form-row full"><label>Reason for Edit *</label><textarea id="edit-reason" style="min-height:50px;" placeholder="Explain why this transaction needs to be changed"></textarea></div>' +
+    '</div>' +
+    '<div class="form-actions">' +
+    '<button class="btn-secondary" onclick="closeModal('modal-payout')">Cancel</button>' +
+    '<button class="btn-primary" onclick="submitEditRequest('' + txId + '')">Submit Edit Request</button>' +
+    '</div>';
+  openModal('modal-payout');
+}
+
+async function submitEditRequest(txId) {
+  const tx = allTransactions.find(t=>t.id===txId);
+  if (!tx) return;
+  const reason = document.getElementById('edit-reason').value.trim();
+  if (!reason) return alert('Please provide a reason for the edit.');
+  const proposed = {
+    tx_date: document.getElementById('edit-date').value,
+    amount: r2(document.getElementById('edit-amount').value),
+    tx_type: document.getElementById('edit-type').value,
+    donor_source: document.getElementById('edit-donor').value.trim(),
+    note: document.getElementById('edit-note').value.trim()
+  };
+  const { error } = await sb.from('tx_change_requests').insert({
+    request_type: 'edit', tx_id: txId,
+    current_data: { tx_date:tx.tx_date, amount:r2(tx.amount), tx_type:tx.tx_type, donor_source:tx.donor_source, note:tx.note },
+    proposed_data: proposed, reason, requested_by: currentUser.email, status: 'pending'
+  });
+  if (error) { alert('Error: ' + error.message); return; }
+  closeModal('modal-payout');
+  alert('Edit request submitted. A second admin will review it.');
+  await loadChangeRequests();
+}
+
+function openDeleteTxModal(txId) {
+  const tx = allTransactions.find(t=>t.id===txId);
+  if (!tx) return;
+  const fund = allFunds.find(f=>f.id===tx.fund_id);
+  document.getElementById('payout-modal-title').textContent = 'Request Transaction Deletion';
+  document.getElementById('payout-modal-body').innerHTML =
+    '<div class="notice notice-warn" style="margin-bottom:14px;">Deletion requires approval by a second admin. The transaction will not be removed until approved.</div>' +
+    '<div style="background:var(--red-pale);border:1px solid #f5b7b7;border-radius:var(--radius);padding:12px;margin-bottom:14px;">' +
+    '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;color:var(--red);">Transaction to Delete</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">' +
+    '<div><span class="text-muted">Fund:</span> ' + esc(fund?.name||'—') + '</div>' +
+    '<div><span class="text-muted">Date:</span> ' + fmtDate(tx.tx_date) + '</div>' +
+    '<div><span class="text-muted">Type:</span> ' + esc(tx.tx_type) + '</div>' +
+    '<div><span class="text-muted">Amount:</span> <strong>' + fmt(tx.amount) + '</strong></div>' +
+    '<div style="grid-column:1/-1;"><span class="text-muted">Note:</span> ' + esc(tx.note||'—') + '</div>' +
+    '</div></div>' +
+    '<div class="form-row"><label>Reason for Deletion *</label><textarea id="delete-reason" style="min-height:60px;" placeholder="Explain why this transaction should be deleted"></textarea></div>' +
+    '<div class="form-actions">' +
+    '<button class="btn-secondary" onclick="closeModal('modal-payout')">Cancel</button>' +
+    '<button class="btn-danger" onclick="submitDeleteRequest('' + txId + '')">Submit Deletion Request</button>' +
+    '</div>';
+  openModal('modal-payout');
+}
+
+async function submitDeleteRequest(txId) {
+  const tx = allTransactions.find(t=>t.id===txId);
+  if (!tx) return;
+  const reason = document.getElementById('delete-reason').value.trim();
+  if (!reason) return alert('Please provide a reason for the deletion.');
+  const { error } = await sb.from('tx_change_requests').insert({
+    request_type: 'delete', tx_id: txId,
+    current_data: { tx_date:tx.tx_date, amount:r2(tx.amount), tx_type:tx.tx_type, donor_source:tx.donor_source, note:tx.note, fund_id:tx.fund_id },
+    proposed_data: null, reason, requested_by: currentUser.email, status: 'pending'
+  });
+  if (error) { alert('Error: ' + error.message); return; }
+  closeModal('modal-payout');
+  alert('Deletion request submitted. A second admin will review it.');
+  await loadChangeRequests();
+}
+
+function openReviewCR(id) {
+  const req = allChangeRequests.find(r=>r.id===id);
+  if (!req) return;
+  const tx = req.tx || {};
+  const fund = allFunds.find(f=>f.id===tx.fund_id);
+  const isDelete = req.request_type === 'delete';
+  const p = req.proposed_data || {};
+
+  let diffHtml = '';
+  if (!isDelete) {
+    // Show side-by-side diff
+    const fields = [
+      ['Date', fmtDate(req.current_data?.tx_date), fmtDate(p.tx_date)],
+      ['Amount', fmt(req.current_data?.amount), fmt(p.amount)],
+      ['Type', req.current_data?.tx_type, p.tx_type],
+      ['Donor / Source', req.current_data?.donor_source||'—', p.donor_source||'—'],
+      ['Note', req.current_data?.note||'—', p.note||'—']
+    ];
+    diffHtml = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;margin-bottom:16px;">' +
+      '<div style="font-weight:700;color:var(--gray-400);text-transform:uppercase;font-size:10px;letter-spacing:.05em;">Field</div>' +
+      '<div style="font-weight:700;color:var(--gray-400);text-transform:uppercase;font-size:10px;letter-spacing:.05em;">Current</div>' +
+      '<div style="font-weight:700;color:var(--navy);text-transform:uppercase;font-size:10px;letter-spacing:.05em;">Proposed</div>' +
+      fields.map(([label, cur, prop]) => {
+        const changed = cur !== prop;
+        return '<div style="padding:6px 0;border-top:1px solid var(--gray-100);font-weight:500;">' + esc(label) + '</div>' +
+          '<div style="padding:6px 0;border-top:1px solid var(--gray-100);' + (changed?'color:var(--gray-400);text-decoration:line-through;':'') + '">' + esc(cur) + '</div>' +
+          '<div style="padding:6px 0;border-top:1px solid var(--gray-100);' + (changed?'color:var(--green);font-weight:600;':'') + '">' + esc(prop) + '</div>';
+      }).join('') + '</div>';
+  } else {
+    diffHtml = '<div class="notice notice-error" style="margin-bottom:14px;">This will permanently delete the transaction: <strong>' + fmtDate(tx.tx_date) + ' · ' + esc(tx.tx_type) + ' · ' + fmt(tx.amount) + '</strong> from fund <strong>' + esc(fund?.name||'—') + '</strong>. The fund balance will be adjusted automatically.</div>';
+  }
+
+  document.getElementById('cr-modal-title').textContent = (isDelete ? 'Review Deletion Request' : 'Review Edit Request');
+  document.getElementById('cr-modal-body').innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">' +
+    '<div><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Fund</div><div style="font-weight:500;">' + esc(fund?.name||'—') + '</div></div>' +
+    '<div><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Requested By</div><div>' + esc(req.requested_by) + '</div></div>' +
+    '<div style="grid-column:1/-1;"><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Reason</div><div>' + esc(req.reason||'—') + '</div></div>' +
+    '</div>' +
+    diffHtml +
+    (req.requested_by === currentUser.email ? '<div class="notice notice-warn" style="margin-bottom:12px;">You submitted this request. A different admin must approve it.</div>' : '') +
+    '<div class="form-row"><label>Review Note (optional)</label><textarea id="cr-review-note" style="min-height:50px;"></textarea></div>' +
+    '<div class="form-actions">' +
+    (req.requested_by !== currentUser.email ?
+      '<button class="btn-primary btn-sm" onclick="processCRDecision('' + id + '',true)" style="background:var(--green);">&#10003; Approve</button>' +
+      '<button class="btn-danger btn-sm" onclick="processCRDecision('' + id + '',false)">&#10005; Reject</button>' : '') +
+    '<button class="btn-secondary btn-sm" onclick="closeModal('modal-review-cr')">Cancel</button>' +
+    '</div>';
+  openModal('modal-review-cr');
+}
+
+async function processCRDecision(id, approved) {
+  const req = allChangeRequests.find(r=>r.id===id);
+  if (!req) return;
+  const note = document.getElementById('cr-review-note').value.trim();
+  const status = approved ? 'approved' : 'rejected';
+
+  // Update request status
+  const { error: updErr } = await sb.from('tx_change_requests').update({
+    status, reviewed_by: currentUser.email, reviewed_at: new Date().toISOString(), review_note: note
+  }).eq('id', id);
+  if (updErr) { alert('Error: ' + updErr.message); return; }
+
+  if (approved) {
+    const tx = allTransactions.find(t=>t.id===req.tx_id);
+    const fund = tx ? allFunds.find(f=>f.id===tx.fund_id) : null;
+
+    if (req.request_type === 'delete') {
+      // Delete the transaction and reverse its effect on fund balance
+      const { error: delErr } = await sb.from('fund_transactions').delete().eq('id', req.tx_id);
+      if (delErr) { alert('Delete error: ' + delErr.message); return; }
+      if (fund && tx) {
+        const newBal = r2(r2(fund.balance) - r2(tx.amount));
+        await sb.from('funds').update({ balance: newBal }).eq('id', fund.id);
+      }
+    } else if (req.request_type === 'edit') {
+      const p = req.proposed_data;
+      // Apply the balance difference
+      if (fund && tx && r2(p.amount) !== r2(tx.amount)) {
+        const diff = r2(p.amount) - r2(tx.amount);
+        await sb.from('funds').update({ balance: r2(r2(fund.balance) + diff) }).eq('id', fund.id);
+      }
+      const { error: editErr } = await sb.from('fund_transactions').update({
+        tx_date: p.tx_date, amount: r2(p.amount), tx_type: p.tx_type,
+        donor_source: p.donor_source, note: p.note
+      }).eq('id', req.tx_id);
+      if (editErr) { alert('Edit error: ' + editErr.message); return; }
+    }
+  }
+
+  closeModal('modal-review-cr');
+  await loadData();
+  await loadChangeRequests();
+  renderCRTable();
+  renderDashboard();
+  alert(approved ? 'Request approved and applied.' : 'Request rejected.');
+}
 
 // ─── SPENDING POLICY ─────────────────────────────────────────────────────────
 let allSnapshots = [];
