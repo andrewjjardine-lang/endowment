@@ -312,11 +312,11 @@ const CONFIG = {
     </div>
     <div class="nav-section">
       <div class="nav-section-label">Operations</div>
-      <div class="nav-item" data-page="contributions"><span class="nav-icon">&#8679;</span> Contributions</div>
-      <div class="nav-item" data-page="payouts"><span class="nav-icon">&#8681;</span> Payouts</div>
+      <div class="nav-item" data-page="subscriptions"><span class="nav-icon">&#8679;</span> Subscriptions</div>
+      <div class="nav-item" data-page="redemptions"><span class="nav-icon">&#8681;</span> Payouts</div>
       <div class="nav-item" data-page="pools"><span class="nav-icon">&#9650;</span> Investment Pools</div>
       <div class="nav-item" data-page="reports"><span class="nav-icon">&#9635;</span> Reports</div>
-      <div class="nav-item" data-page="spending"><span class="nav-icon">&#9670;</span> Spending Policy</div>
+      <div class="nav-item" data-page="calculator"><span class="nav-icon">&#9670;</span> Spending Policy</div>
     </div>
     <div class="nav-section" id="admin-nav">
       <div class="nav-section-label">Admin</div>
@@ -342,7 +342,7 @@ const CONFIG = {
     <div class="topbar-actions">
       <span class="sync-dot" id="sync-dot" title="Status"></span>
       <button class="btn-secondary btn-sm" onclick="refreshAll()">&#8635; Refresh</button>
-      <button class="btn-primary btn-sm" id="btn-new-contribution" onclick="openContributionModal()">+ Contribution</button>
+      <button class="btn-primary btn-sm" id="btn-new-subscription" onclick="openSubscriptionModal()">+ Subscription</button>
     </div>
   </div>
 
@@ -357,8 +357,8 @@ const CONFIG = {
       <div class="metrics-grid" id="dash-metrics">
         <div class="metric-card"><div class="metric-label">Total AUM</div><div class="metric-value" id="m-aum">—</div><div class="metric-sub">All fund balances</div></div>
         <div class="metric-card gold"><div class="metric-label">Active Funds</div><div class="metric-value" id="m-funds">—</div><div class="metric-sub">Named endowment funds</div></div>
-        <div class="metric-card green"><div class="metric-label">Contributions YTD</div><div class="metric-value" id="m-contrib">—</div><div class="metric-sub">Current calendar year</div></div>
-        <div class="metric-card amber"><div class="metric-label">Payouts YTD</div><div class="metric-value" id="m-payouts">—</div><div class="metric-sub">Approved &amp; posted</div></div>
+        <div class="metric-card green"><div class="metric-label">Subscriptions YTD</div><div class="metric-value" id="m-contrib">—</div><div class="metric-sub">Current calendar year</div></div>
+        <div class="metric-card amber"><div class="metric-label">Redemptions YTD</div><div class="metric-value" id="m-redemptions">—</div><div class="metric-sub">Approved &amp; posted</div></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;" id="dash-charts-grid">
         <div class="card">
@@ -371,7 +371,7 @@ const CONFIG = {
         </div>
       </div>
       <div class="card">
-        <div class="card-header"><h3>Pending Payout Requests</h3><span id="dash-pending-count" class="badge badge-amber"></span></div>
+        <div class="card-header"><h3>Pending Redemption Requests</h3><span id="dash-pending-count" class="badge badge-amber"></span></div>
         <div class="card-body" style="padding:0;">
           <div class="table-wrap"><table id="dash-pending-table">
             <thead><tr><th>Fund</th><th>Payee</th><th>Amount</th><th>Requested By</th><th>Date</th><th></th></tr></thead>
@@ -407,37 +407,37 @@ const CONFIG = {
     <div class="page" id="page-fund-detail"></div>
 
     <!-- CONTRIBUTIONS -->
-    <div class="page" id="page-contributions">
+    <div class="page" id="page-subscriptions">
       <div class="page-header">
-        <div><h2>Contributions</h2><div class="page-sub">Gifts and additions to funds</div></div>
+        <div><h2>Subscriptions</h2><div class="page-sub">Gifts and additions to funds</div></div>
         <div class="page-header-actions">
-          <button class="btn-primary admin-only" onclick="openContributionModal()">+ Record Contribution</button>
+          <button class="btn-primary admin-only" onclick="openSubscriptionModal()">+ Record Subscription</button>
         </div>
       </div>
       <div class="toolbar">
-        <input class="search-input" type="search" id="contrib-search" placeholder="Search…" oninput="renderContribTable()">
+        <input class="search-input" type="search" id="subscrib-search" placeholder="Search…" oninput="renderSubscribTable()">
       </div>
       <div class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>Date</th><th>Fund</th><th>Donor / Source</th><th>Amount</th><th>Note</th><th>Posted By</th><th></th></tr></thead>
-          <tbody id="contrib-tbody"><tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
+          <tbody id="subscrib-tbody"><tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
         </table></div>
       </div>
     </div>
 
     <!-- PAYOUTS -->
-    <div class="page" id="page-payouts">
+    <div class="page" id="page-redemptions">
       <div class="page-header">
-        <div><h2>Payouts</h2><div class="page-sub">Grant and payout requests</div></div>
+        <div><h2>Redemptions</h2><div class="page-sub">Grant and redemption requests</div></div>
         <div class="page-header-actions">
-          <button class="btn-primary" onclick="openPayoutRequestModal()">+ Request Payout</button>
+          <button class="btn-primary" onclick="openRedemptionModal()">+ Request Redemption</button>
         </div>
       </div>
       <div class="tabs">
-        <button class="tab-btn active" onclick="setPayoutTab('pending',this)">Pending Approval</button>
-        <button class="tab-btn" onclick="setPayoutTab('approved',this)">Approved</button>
-        <button class="tab-btn" onclick="setPayoutTab('rejected',this)">Rejected</button>
-        <button class="tab-btn" onclick="setPayoutTab('all',this)">All</button>
+        <button class="tab-btn active" onclick="setRedemptionTab('pending',this)">Pending Approval</button>
+        <button class="tab-btn" onclick="setRedemptionTab('approved',this)">Approved</button>
+        <button class="tab-btn" onclick="setRedemptionTab('rejected',this)">Rejected</button>
+        <button class="tab-btn" onclick="setRedemptionTab('all',this)">All</button>
       </div>
       <div class="card">
         <div class="table-wrap"><table>
@@ -450,13 +450,21 @@ const CONFIG = {
     <!-- INVESTMENT POOLS -->
     <div class="page" id="page-pools">
       <div class="page-header">
-        <div><h2>Investment Pools</h2><div class="page-sub">Manage investment tranches and post returns</div></div>
+        <div><h2>Investment Pools</h2><div class="page-sub">Post monthly gains/losses per pool</div></div>
         <div class="page-header-actions">
+          <button class="btn-gold admin-only" onclick="openPostReturnModal()">+ Post Monthly Return</button>
           <button class="btn-primary admin-only" onclick="openPoolModal()">+ New Pool</button>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" id="pools-grid">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;" id="pools-grid">
         <div class="loading-row" style="grid-column:1/-1;text-align:center;padding:30px;"><span class="spinner"></span></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Recent Pool Returns</h3></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Date</th><th>Pool</th><th>Amount</th><th>Note</th><th>Posted By</th><th class="admin-only"></th></tr></thead>
+          <tbody id="returns-tbody"><tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
+        </table></div>
       </div>
     </div>
 
@@ -519,24 +527,24 @@ const CONFIG = {
     </div>
 
     <!-- SPENDING POLICY -->
-    <div class="page" id="page-spending">
+    <div class="page" id="page-calculator">
       <div class="page-header">
-        <div><h2>Spending Policy</h2><div class="page-sub">Payout available per fund based on 12-quarter average balance</div></div>
+        <div><h2>Payout Calculator</h2><div class="page-sub">Payout available per fund based on 12-quarter average balance</div></div>
         <div class="page-header-actions">
-          <button class="btn-secondary btn-sm" onclick="renderSpendingPage()">&#8635; Recalculate</button>
+          <button class="btn-secondary btn-sm" onclick="renderCalculatorPage()">&#8635; Recalculate</button>
         </div>
       </div>
       <div class="metrics-grid" id="spending-metrics">
-        <div class="metric-card"><div class="metric-label">Total Annual Payout Available</div><div class="metric-value" id="sp-total-annual">—</div></div>
+        <div class="metric-card"><div class="metric-label">Total Annual Redemption Calculator</div><div class="metric-value" id="sp-total-annual">—</div></div>
         <div class="metric-card gold"><div class="metric-label">Total Quarterly Payout</div><div class="metric-value" id="sp-total-quarterly">—</div></div>
         <div class="metric-card green"><div class="metric-label">Default Rate</div><div class="metric-value">4.25%</div><div class="metric-sub">12-quarter avg balance</div></div>
         <div class="metric-card amber"><div class="metric-label">Funds with Custom Rules</div><div class="metric-value" id="sp-custom-count">—</div></div>
       </div>
       <div class="notice notice-info" id="sp-history-notice" style="display:none;"></div>
       <div class="card">
-        <div class="card-header"><h3>Fund Payout Summary</h3></div>
+        <div class="card-header"><h3>Fund Redemption Summary</h3></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Fund</th><th class="td-right">Current Balance</th><th class="td-right">12-Qtr Avg Balance</th><th>Payout Rule</th><th class="td-right">Annual Payout</th><th class="td-right">Quarterly Payout</th><th class="admin-only"></th></tr></thead>
+          <thead><tr><th>Fund</th><th class="td-right">Current Balance</th><th class="td-right">12-Qtr Avg Balance</th><th>Redemption Rule</th><th class="td-right">Annual Payout</th><th class="td-right">Quarterly Payout</th><th class="admin-only"></th></tr></thead>
           <tbody id="spending-tbody"><tr class="loading-row"><td colspan="7"><span class="spinner"></span></td></tr></tbody>
         </table></div>
       </div>
@@ -601,14 +609,14 @@ const CONFIG = {
 
 <!-- MODALS -->
 <div class="modal-overlay" id="modal-fund"><div class="modal"><div class="modal-header"><h3 id="fund-modal-title">New Fund</h3><button class="modal-close" onclick="closeModal('modal-fund')">&times;</button></div><div class="modal-body" id="fund-modal-body"></div></div></div>
-<div class="modal-overlay" id="modal-contribution"><div class="modal"><div class="modal-header"><h3>Record Contribution</h3><button class="modal-close" onclick="closeModal('modal-contribution')">&times;</button></div><div class="modal-body" id="contribution-modal-body"></div></div></div>
-<div class="modal-overlay" id="modal-payout"><div class="modal"><div class="modal-header"><h3 id="payout-modal-title">Request Payout</h3><button class="modal-close" onclick="closeModal('modal-payout')">&times;</button></div><div class="modal-body" id="payout-modal-body"></div></div></div>
+<div class="modal-overlay" id="modal-subscription"><div class="modal"><div class="modal-header"><h3>Record Subscription</h3><button class="modal-close" onclick="closeModal('modal-subscription')">&times;</button></div><div class="modal-body" id="subscription-modal-body"></div></div></div>
+<div class="modal-overlay" id="modal-redemption"><div class="modal"><div class="modal-header"><h3 id="redemption-modal-title">Request Redemption</h3><button class="modal-close" onclick="closeModal('modal-redemption')">&times;</button></div><div class="modal-body" id="redemption-modal-body"></div></div></div>
 <div class="modal-overlay" id="modal-pool"><div class="modal"><div class="modal-header"><h3 id="pool-modal-title">Investment Pool</h3><button class="modal-close" onclick="closeModal('modal-pool')">&times;</button></div><div class="modal-body" id="pool-modal-body"></div></div></div>
 <div class="modal-overlay" id="modal-return"><div class="modal modal-lg"><div class="modal-header"><h3>Post Investment Return</h3><button class="modal-close" onclick="closeModal('modal-return')">&times;</button></div><div class="modal-body" id="return-modal-body"></div></div></div>
 <div class="modal-overlay" id="modal-account"><div class="modal"><div class="modal-header"><h3>Account Settings</h3><button class="modal-close" onclick="closeModal('modal-account')">&times;</button></div><div class="modal-body" id="account-modal-body"></div></div></div>
 <div class="modal-overlay" id="modal-invite"><div class="modal"><div class="modal-header"><h3>Invite User</h3><button class="modal-close" onclick="closeModal('modal-invite')">&times;</button></div><div class="modal-body" id="invite-modal-body"></div></div></div>
 <div class="modal-overlay" id="modal-review-cr"><div class="modal modal-lg"><div class="modal-header"><h3 id="cr-modal-title">Review Change Request</h3><button class="modal-close" onclick="closeModal('modal-review-cr')">&times;</button></div><div class="modal-body" id="cr-modal-body"></div></div></div>
-<div class="modal-overlay" id="modal-review-payout"><div class="modal"><div class="modal-header"><h3>Review Payout Request</h3><button class="modal-close" onclick="closeModal('modal-review-payout')">&times;</button></div><div class="modal-body" id="review-payout-body"></div></div></div>
+<div class="modal-overlay" id="modal-review-payout"><div class="modal"><div class="modal-header"><h3>Review Redemption Request</h3><button class="modal-close" onclick="closeModal('modal-review-payout')">&times;</button></div><div class="modal-body" id="review-payout-body"></div></div></div>
 
 <script>
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -644,6 +652,7 @@ create table if not exists funds (
   pool_id uuid references investment_pools(id),
   established_date date,
   notes text,
+  fixed_redemption numeric(14,2) default null,
   payout_rate numeric(6,4) default null,
   payout_fixed numeric(14,2) default null,
   created_by text,
@@ -673,7 +682,7 @@ create table if not exists fund_transactions (
   created_by text,
   created_at timestamptz default now()
 );
--- tx_type values: Contribution, Payout, Return Allocation, Return Correction
+-- tx_type values: Subscription, Payout, Return Allocation, Return Correction
 
 -- Payout requests (approval queue)
 create table if not exists payout_requests (
@@ -691,7 +700,7 @@ create table if not exists payout_requests (
 );
 -- status values: pending, approved, rejected
 
--- Investment pool return entries
+-- Monthly pool return/gain/loss entries (one per pool per month)
 create table if not exists pool_returns (
   id uuid primary key default gen_random_uuid(),
   pool_id uuid not null references investment_pools(id),
@@ -699,7 +708,8 @@ create table if not exists pool_returns (
   gross_return numeric(14,2) not null,
   note text,
   created_by text,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  unique(pool_id, return_date)
 );
 
 -- Per-fund return allocations (written when a pool return is posted)
@@ -767,7 +777,7 @@ notify pgrst, 'reload config';
 // ─── GLOBALS ─────────────────────────────────────────────────────────────────
 let sb, currentUser, currentProfile;
 let allFunds = [], allPools = [], allTransactions = [], allPayoutRequests = [], allUsers = [];
-let currentFundFilter = 'all', currentPayoutTab = 'pending';
+let currentFundFilter = 'all', currentRedemptionTab = 'pending';
 let balanceChart, activityChart;
 let editingFundId = null, editingPoolId = null;
 
@@ -952,7 +962,7 @@ function renderApp() {
   const isAdmin = currentProfile.role === 'admin';
   document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
   document.getElementById('admin-nav').style.display = isAdmin ? '' : 'none';
-  document.getElementById('btn-new-contribution').style.display = isAdmin ? '' : 'none';
+  document.getElementById('btn-new-subscription').style.display = isAdmin ? '' : 'none';
   // Nav
   document.querySelectorAll('.nav-item').forEach(el => {
     el.addEventListener('click', () => { navigateTo(el.dataset.page); if(window.innerWidth<=768) closeSidebar(); });
@@ -1004,8 +1014,8 @@ function navigateTo(page) {
   const navEl = document.querySelector('[data-page="' + page + '"]');
   if (navEl) navEl.classList.add('active');
   document.getElementById('topbar-title').textContent = {
-    dashboard:'Dashboard', funds:'Funds', contributions:'Contributions',
-    payouts:'Payouts', pools:'Investment Pools', reports:'Reports',
+    dashboard:'Dashboard', funds:'Funds', subscriptions:'Subscriptions',
+    redemptions:'Redemptions', pools:'Investment Pools', reports:'Reports',
     users:'User Management', import:'Import Data', setup:'Setup & Backups',
     'fund-detail': 'Fund Detail'
   }[page] || page;
@@ -1018,11 +1028,11 @@ function renderCurrentPage(page) {
   page = page || document.querySelector('.page.active')?.id?.replace('page-','');
   if (page === 'dashboard') renderDashboard();
   else if (page === 'funds') renderFundsTable();
-  else if (page === 'contributions') renderContribTable();
-  else if (page === 'payouts') renderPayoutsTable();
+  else if (page === 'subscriptions') renderSubscribTable();
+  else if (page === 'redemptions') renderRedemptionsTable();
   else if (page === 'pools') renderPoolsGrid();
   else if (page === 'users') loadUsers();
-  else if (page === 'spending') renderSpendingPage();
+  else if (page === 'calculator') renderCalculatorPage();
   else if (page === 'change-requests') { loadChangeRequests().then(renderCRTable); }
 }
 
@@ -1043,12 +1053,12 @@ function renderDashboard() {
   const activeFunds = allFunds.filter(f => f.status === 'active');
   const totalAUM = allFunds.reduce((s,f) => s + r2(f.balance), 0);
   const ytdStart = new Date().getFullYear() + '-01-01';
-  const ytdContrib = allTransactions.filter(t => t.tx_type === 'Contribution' && t.tx_date >= ytdStart).reduce((s,t) => s+r2(t.amount),0);
-  const ytdPayout = allTransactions.filter(t => t.tx_type === 'Payout' && t.tx_date >= ytdStart).reduce((s,t) => s+r2(t.amount),0);
+  const ytdContrib = allTransactions.filter(t => t.tx_type === 'Subscription' && t.tx_date >= ytdStart).reduce((s,t) => s+r2(t.amount),0);
+  const ytdPayout = allTransactions.filter(t => t.tx_type === 'Redemption' && t.tx_date >= ytdStart).reduce((s,t) => s+r2(t.amount),0);
   document.getElementById('m-aum').textContent = fmt(totalAUM);
   document.getElementById('m-funds').textContent = activeFunds.length;
   document.getElementById('m-contrib').textContent = fmt(ytdContrib);
-  document.getElementById('m-payouts').textContent = fmt(ytdPayout);
+  document.getElementById('m-redemptions').textContent = fmt(ytdPayout);
   // Pending payouts table
   const pending = allPayoutRequests.filter(p => p.status === 'pending');
   document.getElementById('dash-pending-count').textContent = pending.length || '';
@@ -1087,8 +1097,8 @@ function renderDashCharts() {
     const d = new Date(); d.setMonth(d.getMonth()-i);
     const ym = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     months.push(ym);
-    contribs.push(allTransactions.filter(t=>t.tx_type==='Contribution'&&t.tx_date?.startsWith(ym)).reduce((s,t)=>s+r2(t.amount),0));
-    payoutsArr.push(allTransactions.filter(t=>t.tx_type==='Payout'&&t.tx_date?.startsWith(ym)).reduce((s,t)=>s+r2(t.amount),0));
+    contribs.push(allTransactions.filter(t=>t.tx_type==='Subscription'&&t.tx_date?.startsWith(ym)).reduce((s,t)=>s+r2(t.amount),0));
+    payoutsArr.push(allTransactions.filter(t=>t.tx_type==='Redemption'&&t.tx_date?.startsWith(ym)).reduce((s,t)=>s+r2(t.amount),0));
     returns.push(allTransactions.filter(t=>t.tx_type==='Return Allocation'&&t.tx_date?.startsWith(ym)).reduce((s,t)=>s+r2(t.amount),0));
   }
   const ctx2 = document.getElementById('chart-activity').getContext('2d');
@@ -1098,7 +1108,7 @@ function renderDashCharts() {
     data: {
       labels: months.map(m => { const [y,mo]=m.split('-'); return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1]+' '+y.slice(2); }),
       datasets: [
-        { label:'Contributions', data:contribs, backgroundColor:'#2d6a4f' },
+        { label:'Subscriptions', data:contribs, backgroundColor:'#2d6a4f' },
         { label:'Payouts', data:payoutsArr, backgroundColor:'#8b1a1a' },
         { label:'Returns', data:returns, backgroundColor:'#b8860b' }
       ]
@@ -1152,6 +1162,7 @@ function openFundModal(id) {
     '<div class="form-row"><label>Status</label><select id="f-status"><option value="active"'+((!fund||fund.status==='active')?' selected':'')+'>Active</option><option value="closed"'+(fund?.status==='closed'?' selected':'')+'>Closed</option></select></div>' +
     '<div class="form-row full"><label>Restrictions / Purpose</label><textarea id="f-restrictions">' + esc(fund?.restrictions||'') + '</textarea></div>' +
     '<div class="form-row full"><label>Notes</label><textarea id="f-notes">' + esc(fund?.notes||'') + '</textarea></div>' +
+    '<div class="form-row"><label>Fixed Monthly Redemption (CAD)</label><input type="number" step="0.01" id="f-fixed-redemption" value="' + (fund?.fixed_redemption||'') + '" placeholder="Leave blank if not fixed"></div>' +
     '<div class="form-row full"><div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:12px;"><div style="font-size:12px;font-weight:600;color:var(--gray-600);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Spending Policy Override</div><div class="form-grid"><div class="form-row"><label>Custom Rate (% per year)</label><input type="number" step="0.01" id="f-payout-rate" value="' + (fund?.payout_rate||'') + '" placeholder="Leave blank for default 4.25%"></div><div class="form-row"><label>Fixed Annual Payout (CAD)</label><input type="number" step="0.01" id="f-payout-fixed" value="' + (fund?.payout_fixed||'') + '" placeholder="Leave blank to use % rule"></div></div><div class="text-muted" style="font-size:11px;margin-top:4px;">Fixed amount takes priority over custom rate. Custom rate takes priority over the default 4.25%.</div></div></div>' +
     '</div>' +
     '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-fund\')">Cancel</button><button class="btn-primary" onclick="saveFund()">Save Fund</button></div>';
@@ -1218,7 +1229,7 @@ async function openFundDetail(fundId) {
   tabs.className = 'tabs';
   tabs.innerHTML =
     '<button class="tab-btn active" onclick="showFundTab(\'ledger\',this)">Ledger</button>' +
-    '<button class="tab-btn" onclick="showFundTab(\'payouts\',this)">Payouts</button>';
+    '<button class="tab-btn" onclick="showFundTab(\'payouts\',this)">Redemptions</button>';
   page.appendChild(tabs);
   // Ledger tab
   const ledger = document.createElement('div');
@@ -1237,7 +1248,7 @@ async function openFundDetail(fundId) {
     '</td></tr>'
   ).join('') : '<tr><td colspan="7" class="text-center text-muted" style="padding:20px;">No transactions</td></tr>';
   ledger.innerHTML = '<div class="card-header"><h3>Transaction Ledger</h3>' +
-    (currentProfile.role==='admin' ? '<div style="display:flex;gap:6px;"><button class="btn-primary btn-sm" onclick="openContributionModal(\'' + fund.id + '\')">+ Contribution</button><button class="btn-primary btn-sm" onclick="openPayoutRequestModal(\'' + fund.id + '\')">+ Payout</button></div>' : '') +
+    (currentProfile.role==='admin' ? '<div style="display:flex;gap:6px;"><button class="btn-primary btn-sm" onclick="openSubscriptionModal(\'' + fund.id + '\')">+ Subscription</button><button class="btn-primary btn-sm" onclick="openRedemptionModal(\'' + fund.id + '\')">+ Payout</button></div>' : '') +
     '</div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Donor / Source</th><th class="td-right">Amount</th><th>Note</th><th>Posted By</th><th></th></tr></thead><tbody>' + txHtml + '</tbody></table></div>';
   // Chart section
   const chartSection = document.createElement('div');
@@ -1262,10 +1273,10 @@ async function openFundDetail(fundId) {
   const pyHtml = fundPayouts.length ? fundPayouts.map(p =>
     '<tr><td>' + esc(p.payee) + '</td><td class="td-right">' + fmt(p.amount) + '</td>' +
     '<td>' + esc(p.purpose||'—') + '</td>' +
-    '<td><span class="badge ' + payoutBadge(p.status) + '">' + esc(p.status) + '</span></td>' +
+    '<td><span class="badge ' + redemptionBadge(p.status) + '">' + esc(p.status) + '</span></td>' +
     '<td>' + fmtDatetime(p.created_at) + '</td></tr>'
-  ).join('') : '<tr><td colspan="5" class="text-center text-muted" style="padding:20px;">No payout requests</td></tr>';
-  payTab.innerHTML = '<div class="card"><div class="card-header"><h3>Payout Requests</h3></div><div class="table-wrap"><table><thead><tr><th>Payee</th><th class="td-right">Amount</th><th>Purpose</th><th>Status</th><th>Date</th></tr></thead><tbody>' + pyHtml + '</tbody></table></div></div>';
+  ).join('') : '<tr><td colspan="5" class="text-center text-muted" style="padding:20px;">No redemption requests</td></tr>';
+  payTab.innerHTML = '<div class="card"><div class="card-header"><h3>Redemption Requests</h3></div><div class="table-wrap"><table><thead><tr><th>Payee</th><th class="td-right">Amount</th><th>Purpose</th><th>Status</th><th>Date</th></tr></thead><tbody>' + pyHtml + '</tbody></table></div></div>';
   page.appendChild(payTab);
   navigateTo('fund-detail');
   renderFundDetailChart(fundId, '12m');
@@ -1279,20 +1290,20 @@ function showFundTab(tab, btn) {
 }
 
 function txBadge(type) {
-  if (type==='Contribution') return 'badge-green';
-  if (type==='Payout') return 'badge-red';
+  if (type==='Subscription') return 'badge-green';
+  if (type==='Redemption') return 'badge-red';
   if (type==='Return Allocation') return 'badge-navy';
   return 'badge-gray';
 }
-function payoutBadge(status) {
+function redemptionBadge(status) {
   if (status==='approved') return 'badge-green';
   if (status==='rejected') return 'badge-red';
   return 'badge-amber';
 }
 
 // ─── CONTRIBUTIONS ────────────────────────────────────────────────────────────
-function openContributionModal(prefillFundId) {
-  document.getElementById('contribution-modal-body').innerHTML =
+function openSubscriptionModal(prefillFundId) {
+  document.getElementById('subscription-modal-body').innerHTML =
     '<div class="form-grid">' +
     '<div class="form-row full"><label>Fund *</label><select id="c-fund">' + allFunds.filter(f=>f.status==='active').map(f=>'<option value="'+f.id+'"'+(prefillFundId===f.id?' selected':'')+'>'+esc(f.name)+'</option>').join('') + '</select></div>' +
     '<div class="form-row"><label>Date *</label><input type="date" id="c-date" value="' + new Date().toISOString().slice(0,10) + '"></div>' +
@@ -1300,17 +1311,17 @@ function openContributionModal(prefillFundId) {
     '<div class="form-row full"><label>Donor / Source</label><input id="c-donor" placeholder="Donor name or source"></div>' +
     '<div class="form-row full"><label>Note</label><textarea id="c-note" style="min-height:50px;"></textarea></div>' +
     '</div>' +
-    '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-contribution\')">Cancel</button><button class="btn-primary" onclick="saveContribution()">Post Contribution</button></div>';
-  openModal('modal-contribution');
+    '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-subscription\')">Cancel</button><button class="btn-primary" onclick="saveSubscription()">Post Subscription</button></div>';
+  openModal('modal-subscription');
 }
 
-async function saveContribution() {
+async function saveSubscription() {
   const fundId = document.getElementById('c-fund').value;
   const date = document.getElementById('c-date').value;
   const amount = r2(document.getElementById('c-amount').value);
   if (!fundId || !date || !amount) return alert('Fund, date, and amount are required.');
   const { error: txErr } = await sb.from('fund_transactions').insert({
-    fund_id: fundId, tx_date: date, tx_type: 'Contribution', amount,
+    fund_id: fundId, tx_date: date, tx_type: 'Subscription', amount,
     donor_source: document.getElementById('c-donor').value.trim(),
     note: document.getElementById('c-note').value.trim(),
     created_by: currentUser.email
@@ -1319,18 +1330,18 @@ async function saveContribution() {
   // Update fund balance
   const fund = allFunds.find(f=>f.id===fundId);
   await sb.from('funds').update({ balance: r2((fund?.balance||0)+amount) }).eq('id', fundId);
-  closeModal('modal-contribution');
+  closeModal('modal-subscription');
   await loadData();
-  renderContribTable();
+  renderSubscribTable();
   renderDashboard();
 }
 
-function renderContribTable() {
-  const q = (document.getElementById('contrib-search').value||'').toLowerCase();
-  let txs = allTransactions.filter(t=>t.tx_type==='Contribution');
+function renderSubscribTable() {
+  const q = (document.getElementById('subscrib-search').value||'').toLowerCase();
+  let txs = allTransactions.filter(t=>t.tx_type==='Subscription');
   if (q) txs = txs.filter(t=>(t.fund?.name||'').toLowerCase().includes(q)||(t.donor_source||'').toLowerCase().includes(q));
-  const tbody = document.getElementById('contrib-tbody');
-  if (!txs.length) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:20px;">No contributions found</td></tr>'; return; }
+  const tbody = document.getElementById('subscrib-tbody');
+  if (!txs.length) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:20px;">No subscriptions found</td></tr>'; return; }
   tbody.innerHTML = txs.map(t =>
     '<tr><td>' + fmtDate(t.tx_date) + '</td>' +
     '<td><a href="#" onclick="openFundDetail(\'' + t.fund_id + '\');return false;">' + esc(t.fund?.name||'—') + '</a></td>' +
@@ -1346,15 +1357,15 @@ function renderContribTable() {
 }
 
 // ─── PAYOUTS ──────────────────────────────────────────────────────────────────
-function setPayoutTab(tab, btn) {
-  currentPayoutTab = tab;
-  document.querySelectorAll('#page-payouts .tab-btn').forEach(b=>b.classList.remove('active'));
+function setRedemptionTab(tab, btn) {
+  currentRedemptionTab = tab;
+  document.querySelectorAll('#page-redemptions .tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  renderPayoutsTable();
+  renderRedemptionsTable();
 }
 
-function openPayoutRequestModal(prefillFundId) {
-  document.getElementById('payout-modal-title').textContent = 'Request Payout';
+function openRedemptionModal(prefillFundId) {
+  document.getElementById('redemption-modal-title').textContent = 'Request Redemption';
   const activeFunds = allFunds.filter(f=>f.status==='active');
   const fundOptions = activeFunds.map(f => {
     const p = getFundAnnualPayout(f);
@@ -1364,8 +1375,8 @@ function openPayoutRequestModal(prefillFundId) {
   const initialFund = (prefillFundId ? allFunds.find(f=>f.id===prefillFundId) : activeFunds[0]);
   const initialPayout = initialFund ? r2(getFundAnnualPayout(initialFund).annual / 4) : 0;
   const initialRule = initialFund ? getFundAnnualPayout(initialFund).rule : '';
-  document.getElementById('payout-modal-body').innerHTML =
-    '<div class="notice notice-info" style="margin-bottom:14px;">Amount is pre-filled from the fund spending policy. You may adjust if needed. A second admin must approve before disbursement.</div>' +
+  document.getElementById('redemption-modal-body').innerHTML =
+    '<div class="notice notice-info" style="margin-bottom:14px;">Amount is pre-filled from the fund\'s redemption policy. You may adjust if needed. A second admin must approve before disbursement.</div>' +
     '<div class="form-grid">' +
     '<div class="form-row full"><label>Fund *</label><select id="p-fund" onchange="updatePayoutAmount()">' + fundOptions + '</select></div>' +
     '<div class="form-row"><label>Payee *</label><input id="p-payee" placeholder="Recipient name"></div>' +
@@ -1374,8 +1385,8 @@ function openPayoutRequestModal(prefillFundId) {
     '<div id="p-amount-hint" class="text-muted" style="font-size:11px;margin-top:3px;">Based on: ' + esc(initialRule) + '</div></div>' +
     '<div class="form-row full"><label>Purpose / Description *</label><textarea id="p-purpose"></textarea></div>' +
     '</div>' +
-    '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-payout\')">Cancel</button><button class="btn-primary" onclick="submitPayoutRequest()">Submit Request</button></div>';
-  openModal('modal-payout');
+    '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-redemption\')">Cancel</button><button class="btn-primary" onclick="submitRedemption()">Submit Request</button></div>';
+  openModal('modal-redemption');
 }
 
 function updatePayoutAmount() {
@@ -1388,7 +1399,7 @@ function updatePayoutAmount() {
 }
 
 
-async function submitPayoutRequest() {
+async function submitRedemption() {
   const fundId = document.getElementById('p-fund').value;
   const payee = document.getElementById('p-payee').value.trim();
   const amount = r2(document.getElementById('p-amount').value);
@@ -1400,17 +1411,17 @@ async function submitPayoutRequest() {
     fund_id: fundId, payee, amount, purpose, requested_by: currentUser.email, status: 'pending'
   });
   if (error) { alert('Error: ' + error.message); return; }
-  closeModal('modal-payout');
+  closeModal('modal-redemption');
   await loadData();
-  renderPayoutsTable();
+  renderRedemptionsTable();
 }
 
-function renderPayoutsTable() {
+function renderRedemptionsTable() {
   let payouts = allPayoutRequests;
-  if (currentPayoutTab !== 'all') payouts = payouts.filter(p=>p.status===currentPayoutTab);
+  if (currentRedemptionTab !== 'all') payouts = payouts.filter(p=>p.status===currentRedemptionTab);
   const tbody = document.getElementById('payouts-tbody');
   const isAdmin = currentProfile.role === 'admin';
-  if (!payouts.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:20px;">No payout requests</td></tr>'; return; }
+  if (!payouts.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:20px;">No redemption requests</td></tr>'; return; }
   tbody.innerHTML = payouts.map(p =>
     '<tr><td><a href="#" onclick="openFundDetail(\'' + p.fund_id + '\');return false;">' + esc(p.fund?.name||'—') + '</a></td>' +
     '<td>' + esc(p.payee) + '</td>' +
@@ -1418,7 +1429,7 @@ function renderPayoutsTable() {
     '<td>' + esc(p.purpose||'—') + '</td>' +
     '<td class="text-muted">' + esc(p.requested_by||'—') + '</td>' +
     '<td>' + fmtDatetime(p.created_at) + '</td>' +
-    '<td><span class="badge ' + payoutBadge(p.status) + '">' + esc(p.status) + '</span>' +
+    '<td><span class="badge ' + redemptionBadge(p.status) + '">' + esc(p.status) + '</span>' +
     (p.review_note ? ' <span class="text-muted" title="'+esc(p.review_note)+'">&#9432;</span>' : '') + '</td>' +
     '<td>' + (isAdmin && p.status==='pending' ? '<button class="btn-gold btn-sm" onclick="openReviewPayout(\'' + p.id + '\')">Review</button>' : '') + '</td>' +
     '</tr>'
@@ -1463,7 +1474,7 @@ async function processPayoutDecision(approved) {
     // Post payout transaction
     const { error: txErr } = await sb.from('fund_transactions').insert({
       fund_id: req.fund_id, tx_date: new Date().toISOString().slice(0,10),
-      tx_type: 'Payout', amount: -r2(req.amount), note: 'Payout to ' + req.payee + (req.purpose ? ': ' + req.purpose : ''),
+      tx_type: 'Redemption', amount: -r2(req.amount), note: 'Payout to ' + req.payee + (req.purpose ? ': ' + req.purpose : ''),
       created_by: currentUser.email
     });
     if (txErr) { alert('Transaction error: ' + txErr.message); return; }
@@ -1473,7 +1484,7 @@ async function processPayoutDecision(approved) {
   }
   closeModal('modal-review-payout');
   await loadData();
-  renderPayoutsTable();
+  renderRedemptionsTable();
   renderDashboard();
 }
 
@@ -1542,86 +1553,103 @@ async function savePool() {
   renderPoolsGrid();
 }
 
-function openReturnModal(poolId) {
-  const pool = allPools.find(p=>p.id===poolId);
-  if (!pool) return;
-  const poolFunds = allFunds.filter(f=>f.pool_id===poolId && f.status==='active');
-  const totalBalance = poolFunds.reduce((s,f)=>s+r2(f.balance),0);
-  let fundsHtml = '<div style="margin-top:14px;"><div style="font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Allocation Preview (pro-rata by balance)</div>';
-  if (!poolFunds.length) {
-    fundsHtml += '<div class="notice notice-warn">No active funds linked to this pool.</div>';
-  } else {
-    fundsHtml += '<div class="table-wrap"><table><thead><tr><th>Fund</th><th class="td-right">Balance</th><th class="td-right">Share</th><th class="td-right" id="alloc-header">Allocation</th></tr></thead><tbody id="alloc-preview">';
-    poolFunds.forEach(f => {
-      const share = totalBalance > 0 ? r2(f.balance)/totalBalance : 0;
-      fundsHtml += '<tr><td>' + esc(f.name) + '</td><td class="td-right">' + fmt(f.balance) + '</td><td class="td-right">' + (share*100).toFixed(1) + '%</td><td class="td-right alloc-amt" data-share="' + share + '" data-fund-id="' + f.id + '">—</td></tr>';
-    });
-    fundsHtml += '</tbody></table></div>';
-  }
-  fundsHtml += '</div>';
-  document.getElementById('return-modal-body').innerHTML =
-    '<div class="notice notice-info" style="margin-bottom:12px;">Returns are allocated pro-rata to all active funds in this pool based on their current balances.</div>' +
+function openPostReturnModal() {
+  const poolOptions = allPools.filter(p=>p.status==='active').map(p => {
+    const totalAlloc = allFunds.filter(f=>f.pool_id===p.id).reduce((s,f)=>s+r2(f.balance),0);
+    return '<option value="' + p.id + '">' + esc(p.name) + ' (' + fmt(totalAlloc) + ' allocated)</option>';
+  }).join('');
+
+  document.getElementById('pool-modal-title').textContent = 'Post Monthly Return';
+  document.getElementById('pool-modal-body').innerHTML =
+    '<div class="notice notice-info" style="margin-bottom:14px;">Enter the gain or loss for each pool this month. Each pool's return will be distributed pro-rata to its funds based on their current balances.</div>' +
     '<div class="form-grid">' +
-    '<div class="form-row"><label>Return Date *</label><input type="date" id="r-date" value="' + new Date().toISOString().slice(0,10) + '"></div>' +
-    '<div class="form-row"><label>Gross Return Amount (CAD) *</label><input type="number" step="0.01" id="r-amount" placeholder="0.00" oninput="previewAllocation()"></div>' +
-    '<div class="form-row full"><label>Note</label><input id="r-note" placeholder="e.g. Q1 2026 RBC statement"></div>' +
+    '<div class="form-row"><label>Return Date *</label><input type="date" id="pr-date" value="' + new Date().toISOString().slice(0,10) + '"></div>' +
+    '<div class="form-row"><label>Pool *</label><select id="pr-pool" onchange="updateReturnPreview()">' + poolOptions + '</select></div>' +
+    '<div class="form-row"><label>Gain / Loss Amount (CAD) *</label><input type="number" step="0.01" id="pr-amount" placeholder="Enter negative for a loss" oninput="updateReturnPreview()"></div>' +
+    '<div class="form-row"><label>Note</label><input id="pr-note" placeholder="e.g. April 2026 — RBC statement"></div>' +
     '</div>' +
-    fundsHtml +
-    '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-return\')">Cancel</button>' +
-    (poolFunds.length ? '<button class="btn-gold" onclick="postPoolReturn(\'' + poolId + '\')">Post Return</button>' : '') +
+    '<div id="pr-preview" style="margin-top:12px;"></div>' +
+    '<div class="form-actions">' +
+    '<button class="btn-secondary" onclick="closeModal('modal-pool')">Cancel</button>' +
+    '<button class="btn-gold" onclick="postMonthlyReturn()">Post Return</button>' +
     '</div>';
-  openModal('modal-return');
+  updateReturnPreview();
+  openModal('modal-pool');
 }
 
-function previewAllocation() {
-  const gross = r2(document.getElementById('r-amount').value);
-  document.querySelectorAll('.alloc-amt').forEach(cell => {
-    const share = parseFloat(cell.dataset.share||0);
-    cell.textContent = gross ? fmt(r2(gross*share)) : '—';
-  });
+function updateReturnPreview() {
+  const poolId = document.getElementById('pr-pool')?.value;
+  const gross = r2(document.getElementById('pr-amount')?.value || 0);
+  const preview = document.getElementById('pr-preview');
+  if (!preview || !poolId || !gross) { if(preview) preview.innerHTML=''; return; }
+  const poolFunds = allFunds.filter(f=>f.pool_id===poolId&&f.status==='active');
+  const totalBal = poolFunds.reduce((s,f)=>s+r2(f.balance),0);
+  if (!poolFunds.length || !totalBal) { preview.innerHTML = '<div class="notice notice-warn">No active funds in this pool.</div>'; return; }
+  let rows = poolFunds.map(f => {
+    const share = r2(f.balance)/totalBal;
+    const alloc = r2(gross*share);
+    return '<tr><td>' + esc(f.name) + '</td><td class="td-right">' + fmt(f.balance) + '</td>' +
+      '<td class="td-right">' + (share*100).toFixed(1) + '%</td>' +
+      '<td class="td-right" style="font-weight:600;color:' + (alloc>=0?'var(--green)':'var(--red)') + ';">' + fmt(alloc) + '</td></tr>';
+  }).join('');
+  preview.innerHTML = '<div style="font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Allocation Preview</div>' +
+    '<div class="table-wrap"><table><thead><tr><th>Fund</th><th class="td-right">Balance</th><th class="td-right">Share</th><th class="td-right">Allocation</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
-async function postPoolReturn(poolId) {
-  const date = document.getElementById('r-date').value;
-  const gross = r2(document.getElementById('r-amount').value);
-  const note = document.getElementById('r-note').value.trim();
-  if (!date || !gross) return alert('Date and amount are required.');
-  const poolFunds = allFunds.filter(f=>f.pool_id===poolId && f.status==='active');
-  const totalBalance = poolFunds.reduce((s,f)=>s+r2(f.balance),0);
+async function postMonthlyReturn() {
+  const poolId = document.getElementById('pr-pool').value;
+  const date = document.getElementById('pr-date').value;
+  const gross = r2(document.getElementById('pr-amount').value);
+  const note = document.getElementById('pr-note').value.trim();
+  if (!poolId || !date || gross === 0) return alert('Pool, date and amount are required.');
+  const poolFunds = allFunds.filter(f=>f.pool_id===poolId&&f.status==='active');
+  const totalBal = poolFunds.reduce((s,f)=>s+r2(f.balance),0);
   if (!poolFunds.length) return alert('No active funds in this pool.');
+
   // Insert pool return record
-  const { data: retData, error: retErr } = await sb.from('pool_returns').insert({
-    pool_id: poolId, return_date: date, gross_return: gross, note, created_by: currentUser.email
-  }).select().single();
+  const { data: retData, error: retErr } = await sb.from('pool_returns')
+    .upsert({ pool_id:poolId, return_date:date, gross_return:gross, note, created_by:currentUser.email },
+             { onConflict:'pool_id,return_date' })
+    .select().single();
   if (retErr) { alert('Error: ' + retErr.message); return; }
-  // Allocate to each fund
+
+  // Allocate to each fund and post transactions
   const txInserts = [], allocInserts = [];
   poolFunds.forEach(f => {
-    const share = totalBalance > 0 ? r2(f.balance)/totalBalance : 0;
+    const share = totalBal > 0 ? r2(f.balance)/totalBal : 0;
     const alloc = r2(gross * share);
     if (alloc === 0) return;
-    txInserts.push({ fund_id: f.id, tx_date: date, tx_type: 'Return Allocation', amount: alloc, note: note || 'Pool return allocation', created_by: currentUser.email });
-    allocInserts.push({ pool_return_id: retData.id, fund_id: f.id, allocated_amount: alloc, fund_balance_at_time: r2(f.balance) });
+    txInserts.push({ fund_id:f.id, tx_date:date, tx_type:'Return Allocation', amount:alloc,
+      note:(note||'Pool return') + ' — ' + (gross>=0?'Gain':'Loss'), created_by:currentUser.email });
+    allocInserts.push({ pool_return_id:retData.id, fund_id:f.id, allocated_amount:alloc, fund_balance_at_time:r2(f.balance) });
   });
+
   if (txInserts.length) {
     const { error: txErr } = await sb.from('fund_transactions').insert(txInserts);
     if (txErr) { alert('Transaction error: ' + txErr.message); return; }
-    const { error: allocErr } = await sb.from('return_allocations').insert(allocInserts);
-    if (allocErr) { alert('Allocation error: ' + allocErr.message); return; }
-    // Update fund balances
+    if (allocInserts.length) await sb.from('return_allocations').insert(allocInserts);
+    // Update fund balances and snapshot
     for (const tx of txInserts) {
       const fund = allFunds.find(f=>f.id===tx.fund_id);
       await sb.from('funds').update({ balance: r2((fund?.balance||0)+tx.amount) }).eq('id', tx.fund_id);
     }
+    await snapshotAllFundBalances(date);
   }
-  // Snapshot balances for 12-quarter spending policy
-  const returnQEnd = new Date(date);
-  await snapshotAllFundBalances(returnQEnd.toISOString().slice(0,10));
-  closeModal('modal-return');
+  closeModal('modal-pool');
   await loadData();
   renderPoolsGrid();
   renderDashboard();
+  alert('Return posted and allocated to ' + txInserts.length + ' funds.');
 }
+
+async function deletePoolReturn(returnId, poolId) {
+  if (!confirm('Delete this return entry? This will NOT reverse the fund balance allocations — use transaction edit/delete for that.')) return;
+  await sb.from('pool_returns').delete().eq('id', returnId);
+  await loadData();
+  renderPoolsGrid();
+}
+
+
 
 // ─── REPORTS ─────────────────────────────────────────────────────────────────
 function renderReport() {
@@ -1640,8 +1668,8 @@ function renderReport() {
 function renderConsolidatedReport(from, to, out) {
   const txInRange = allTransactions.filter(t=>t.tx_date>=from&&t.tx_date<=to);
   const totalAUM = allFunds.reduce((s,f)=>s+r2(f.balance),0);
-  const contribTotal = txInRange.filter(t=>t.tx_type==='Contribution').reduce((s,t)=>s+r2(t.amount),0);
-  const payoutTotal = Math.abs(txInRange.filter(t=>t.tx_type==='Payout').reduce((s,t)=>s+r2(t.amount),0));
+  const contribTotal = txInRange.filter(t=>t.tx_type==='Subscription').reduce((s,t)=>s+r2(t.amount),0);
+  const payoutTotal = Math.abs(txInRange.filter(t=>t.tx_type==='Redemption').reduce((s,t)=>s+r2(t.amount),0));
   const returnTotal = txInRange.filter(t=>t.tx_type==='Return Allocation').reduce((s,t)=>s+r2(t.amount),0);
   let html =
     '<div class="card" style="margin-bottom:16px;">' +
@@ -1649,18 +1677,18 @@ function renderConsolidatedReport(from, to, out) {
     '<div class="card-body">' +
     '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;">' +
     '<div class="metric-card"><div class="metric-label">Total AUM</div><div class="metric-value">' + fmt(totalAUM) + '</div></div>' +
-    '<div class="metric-card green"><div class="metric-label">Contributions</div><div class="metric-value">' + fmt(contribTotal) + '</div></div>' +
-    '<div class="metric-card amber"><div class="metric-label">Payouts</div><div class="metric-value">' + fmt(payoutTotal) + '</div></div>' +
+    '<div class="metric-card green"><div class="metric-label">Subscriptions</div><div class="metric-value">' + fmt(contribTotal) + '</div></div>' +
+    '<div class="metric-card amber"><div class="metric-label">Redemptions</div><div class="metric-value">' + fmt(payoutTotal) + '</div></div>' +
     '<div class="metric-card gold"><div class="metric-label">Returns Allocated</div><div class="metric-value">' + fmt(returnTotal) + '</div></div>' +
     '</div>' +
     '</div></div>';
   // Fund breakdown table
   html += '<div class="card"><div class="card-header"><h3>Fund Breakdown</h3></div><div class="table-wrap"><table>';
-  html += '<thead><tr><th>Fund</th><th>Category</th><th>Pool</th><th class="td-right">Balance</th><th class="td-right">Contributions</th><th class="td-right">Payouts</th><th class="td-right">Returns</th></tr></thead><tbody>';
+  html += '<thead><tr><th>Fund</th><th>Category</th><th>Pool</th><th class="td-right">Balance</th><th class="td-right">Subscriptions</th><th class="td-right">Redemptions</th><th class="td-right">Returns</th></tr></thead><tbody>';
   allFunds.forEach(f => {
     const ftxs = txInRange.filter(t=>t.fund_id===f.id);
-    const fc = ftxs.filter(t=>t.tx_type==='Contribution').reduce((s,t)=>s+r2(t.amount),0);
-    const fp = Math.abs(ftxs.filter(t=>t.tx_type==='Payout').reduce((s,t)=>s+r2(t.amount),0));
+    const fc = ftxs.filter(t=>t.tx_type==='Subscription').reduce((s,t)=>s+r2(t.amount),0);
+    const fp = Math.abs(ftxs.filter(t=>t.tx_type==='Redemption').reduce((s,t)=>s+r2(t.amount),0));
     const fr = ftxs.filter(t=>t.tx_type==='Return Allocation').reduce((s,t)=>s+r2(t.amount),0);
     html += '<tr><td style="font-weight:500;">' + esc(f.name) + '</td><td>' + esc(f.category||'—') + '</td><td>' + esc(f.pool?.name||'—') + '</td><td class="td-right">' + fmt(f.balance) + '</td><td class="td-right" style="color:var(--green);">' + fmt(fc) + '</td><td class="td-right" style="color:var(--red);">' + (fp?fmt(fp):'—') + '</td><td class="td-right" style="color:var(--navy);">' + (fr?fmt(fr):'—') + '</td></tr>';
   });
@@ -1901,7 +1929,7 @@ async function renderFundDetailChart(fundId, range) {
   (snaps || []).forEach(s => { snapMap[s.snapshot_date] = r2(s.balance); });
 
   const now = new Date();
-  const labels = [], balances = [], contributions = [], payouts = [];
+  const labels = [], balances = [], subscriptions = [], payouts = [];
 
   if (isMonthly) {
     // 12 months — use transactions to build monthly running balance from snapshots
@@ -1918,8 +1946,8 @@ async function renderFundDetailChart(fundId, range) {
     txs.forEach(t => {
       const key = (t.tx_date||'').slice(0,7);
       if (!txByMonth[key]) txByMonth[key] = { contrib:0, payout:0 };
-      if (t.tx_type === 'Contribution') txByMonth[key].contrib += r2(t.amount);
-      else if (t.tx_type === 'Payout') txByMonth[key].payout += Math.abs(r2(t.amount));
+      if (t.tx_type === 'Subscription') txByMonth[key].contrib += r2(t.amount);
+      else if (t.tx_type === 'Redemption') txByMonth[key].payout += Math.abs(r2(t.amount));
     });
 
     let bal = startBal;
@@ -1931,7 +1959,7 @@ async function renderFundDetailChart(fundId, range) {
       const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
       labels.push(monthName + ' ' + String(d.getFullYear()).slice(2));
       balances.push(bal);
-      contributions.push(mo.contrib);
+      subscriptions.push(mo.contrib);
       payouts.push(mo.payout);
     }
   } else {
@@ -1953,8 +1981,8 @@ async function renderFundDetailChart(fundId, range) {
       const d = new Date(t.tx_date + 'T00:00:00');
       const qKey = d.getFullYear() + '-Q' + (Math.floor(d.getMonth()/3)+1);
       if (!txByQuarter[qKey]) txByQuarter[qKey] = { contrib:0, payout:0 };
-      if (t.tx_type === 'Contribution') txByQuarter[qKey].contrib += r2(t.amount);
-      else if (t.tx_type === 'Payout') txByQuarter[qKey].payout += Math.abs(r2(t.amount));
+      if (t.tx_type === 'Subscription') txByQuarter[qKey].contrib += r2(t.amount);
+      else if (t.tx_type === 'Redemption') txByQuarter[qKey].payout += Math.abs(r2(t.amount));
     });
 
     quarterEnds.forEach(qEnd => {
@@ -1983,7 +2011,7 @@ async function renderFundDetailChart(fundId, range) {
       const qtx = txByQuarter[qKey] || { contrib:0, payout:0 };
       labels.push(label);
       balances.push(bal);
-      contributions.push(qtx.contrib);
+      subscriptions.push(qtx.contrib);
       payouts.push(qtx.payout);
     });
   }
@@ -2007,8 +2035,8 @@ async function renderFundDetailChart(fundId, range) {
           yAxisID: 'y'
         },
         {
-          label: 'Contributions',
-          data: contributions,
+          label: 'Subscriptions',
+          data: subscriptions,
           borderColor: '#2d6a4f',
           backgroundColor: 'rgba(45,106,79,0.7)',
           borderWidth: 0,
@@ -2093,7 +2121,7 @@ function renderCRTable() {
       '<td>' + esc(r.reason||'—') + '</td>' +
       '<td class="text-muted">' + esc(r.requested_by||'—') + '</td>' +
       '<td>' + fmtDatetime(r.created_at) + '</td>' +
-      '<td><span class="badge ' + payoutBadge(r.status) + '">' + esc(r.status) + '</span></td>' +
+      '<td><span class="badge ' + redemptionBadge(r.status) + '">' + esc(r.status) + '</span></td>' +
       '<td>' + (isAdmin && r.status==='pending' ? '<button class="btn-gold btn-sm" onclick="openReviewCR(\'' + r.id + '\')">Review</button>' : '') + '</td>' +
       '</tr>';
   }).join('');
@@ -2103,9 +2131,9 @@ function openEditTxModal(txId) {
   const tx = allTransactions.find(t=>t.id===txId);
   if (!tx) return;
   const fund = allFunds.find(f=>f.id===tx.fund_id);
-  // Build a modal inline — reuse modal-payout overlay with custom content
-  document.getElementById('payout-modal-title').textContent = 'Request Transaction Edit';
-  document.getElementById('payout-modal-body').innerHTML =
+  // Build a modal inline — reuse modal-redemption overlay with custom content
+  document.getElementById('redemption-modal-title').textContent = 'Request Transaction Edit';
+  document.getElementById('redemption-modal-body').innerHTML =
     '<div class="notice notice-info" style="margin-bottom:14px;">Edits require approval by a second admin. The transaction will not change until approved.</div>' +
     '<div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:12px;margin-bottom:14px;">' +
     '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Current Transaction</div>' +
@@ -2120,17 +2148,17 @@ function openEditTxModal(txId) {
     '<div class="form-row"><label>New Date</label><input type="date" id="edit-date" value="' + esc(tx.tx_date||'') + '"></div>' +
     '<div class="form-row"><label>New Amount (CAD)</label><input type="number" step="0.01" id="edit-amount" value="' + r2(tx.amount) + '"></div>' +
     '<div class="form-row"><label>New Type</label><select id="edit-type">' +
-    ['Contribution','Payout','Return Allocation','Return Correction'].map(t=>'<option value="'+t+'"'+(tx.tx_type===t?' selected':'')+'>'+t+'</option>').join('') +
+    ['Subscription','Redemption','Return Allocation','Return Correction'].map(t=>'<option value="'+t+'"'+(tx.tx_type===t?' selected':'')+'>'+t+'</option>').join('') +
     '</select></div>' +
     '<div class="form-row"><label>New Donor / Source</label><input id="edit-donor" value="' + esc(tx.donor_source||'') + '"></div>' +
     '<div class="form-row full"><label>New Note</label><input id="edit-note" value="' + esc(tx.note||'') + '"></div>' +
     '<div class="form-row full"><label>Reason for Edit *</label><textarea id="edit-reason" style="min-height:50px;" placeholder="Explain why this transaction needs to be changed"></textarea></div>' +
     '</div>' +
     '<div class="form-actions">' +
-    '<button class="btn-secondary" onclick="closeModal(\'modal-payout\')">Cancel</button>' +
+    '<button class="btn-secondary" onclick="closeModal(\'modal-redemption\')">Cancel</button>' +
     '<button class="btn-primary" onclick="submitEditRequest(\'' + txId + '\')">Submit Edit Request</button>' +
     '</div>';
-  openModal('modal-payout');
+  openModal('modal-redemption');
 }
 
 async function submitEditRequest(txId) {
@@ -2151,7 +2179,7 @@ async function submitEditRequest(txId) {
     proposed_data: proposed, reason, requested_by: currentUser.email, status: 'pending'
   });
   if (error) { alert('Error: ' + error.message); return; }
-  closeModal('modal-payout');
+  closeModal('modal-redemption');
   alert('Edit request submitted. A second admin will review it.');
   await loadChangeRequests();
 }
@@ -2160,8 +2188,8 @@ function openDeleteTxModal(txId) {
   const tx = allTransactions.find(t=>t.id===txId);
   if (!tx) return;
   const fund = allFunds.find(f=>f.id===tx.fund_id);
-  document.getElementById('payout-modal-title').textContent = 'Request Transaction Deletion';
-  document.getElementById('payout-modal-body').innerHTML =
+  document.getElementById('redemption-modal-title').textContent = 'Request Transaction Deletion';
+  document.getElementById('redemption-modal-body').innerHTML =
     '<div class="notice notice-warn" style="margin-bottom:14px;">Deletion requires approval by a second admin. The transaction will not be removed until approved.</div>' +
     '<div style="background:var(--red-pale);border:1px solid #f5b7b7;border-radius:var(--radius);padding:12px;margin-bottom:14px;">' +
     '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;color:var(--red);">Transaction to Delete</div>' +
@@ -2174,10 +2202,10 @@ function openDeleteTxModal(txId) {
     '</div></div>' +
     '<div class="form-row"><label>Reason for Deletion *</label><textarea id="delete-reason" style="min-height:60px;" placeholder="Explain why this transaction should be deleted"></textarea></div>' +
     '<div class="form-actions">' +
-    '<button class="btn-secondary" onclick="closeModal(\'modal-payout\')">Cancel</button>' +
+    '<button class="btn-secondary" onclick="closeModal(\'modal-redemption\')">Cancel</button>' +
     '<button class="btn-danger" onclick="submitDeleteRequest(\'' + txId + '\')">Submit Deletion Request</button>' +
     '</div>';
-  openModal('modal-payout');
+  openModal('modal-redemption');
 }
 
 async function submitDeleteRequest(txId) {
@@ -2191,7 +2219,7 @@ async function submitDeleteRequest(txId) {
     proposed_data: null, reason, requested_by: currentUser.email, status: 'pending'
   });
   if (error) { alert('Error: ' + error.message); return; }
-  closeModal('modal-payout');
+  closeModal('modal-redemption');
   alert('Deletion request submitted. A second admin will review it.');
   await loadChangeRequests();
 }
@@ -2296,7 +2324,7 @@ async function processCRDecision(id, approved) {
   alert(approved ? 'Request approved and applied.' : 'Request rejected.');
 }
 
-// ─── SPENDING POLICY ─────────────────────────────────────────────────────────
+// ─── PAYOUT CALCULATOR ───────────────────────────────────────────────────────
 let allSnapshots = [];
 const DEFAULT_RATE = 4.25;
 
@@ -2305,78 +2333,124 @@ async function loadSnapshots() {
   allSnapshots = data || [];
 }
 
-function getQuarterlyAvg(fundId) {
-  const snaps = allSnapshots.filter(s => s.fund_id === fundId).sort((a,b) => a.snapshot_date > b.snapshot_date ? -1 : 1);
-  const last12 = snaps.slice(0, 12);
-  if (!last12.length) return null;
-  const avg = last12.reduce((s,sn) => s + r2(sn.balance), 0) / last12.length;
-  return r2(avg);
+function getAvgBalance(fundId, numQtrs) {
+  numQtrs = parseInt(numQtrs) || 12;
+  const snaps = allSnapshots.filter(s=>s.fund_id===fundId).sort((a,b)=>b.snapshot_date>a.snapshot_date?-1:1).reverse();
+  const last = snaps.slice(-numQtrs);
+  if (!last.length) return null;
+  return r2(last.reduce((s,sn)=>s+r2(sn.balance),0)/last.length);
 }
 
-function getFundAnnualPayout(fund) {
-  // Fixed amount takes priority
-  if (fund.payout_fixed && r2(fund.payout_fixed) > 0) {
-    return { annual: r2(fund.payout_fixed), rule: 'Fixed $' + fmt(fund.payout_fixed) + '/yr', avg: null };
+function getFundAnnualPayout(fund, rateOverride, qtrsOverride) {
+  if (fund.payout_fixed && r2(fund.payout_fixed)>0) {
+    return { annual:r2(fund.payout_fixed), rule:'Fixed ' + fmt(fund.payout_fixed) + '/yr', avg:null, qtrs:0 };
   }
-  const rate = fund.payout_rate ? parseFloat(fund.payout_rate) : DEFAULT_RATE;
-  const avg = getQuarterlyAvg(fund.id);
+  const rate = rateOverride !== undefined ? parseFloat(rateOverride) : (fund.payout_rate ? parseFloat(fund.payout_rate) : DEFAULT_RATE);
+  const qtrs = qtrsOverride || 12;
+  const avg = getAvgBalance(fund.id, qtrs);
   if (avg === null) {
-    // Fall back to current balance if no snapshot history yet
-    const annual = r2(r2(fund.balance) * rate / 100);
-    return { annual, rule: rate + '% (current bal, no history)', avg: r2(fund.balance), fallback: true };
+    const annual = r2(r2(fund.balance)*rate/100);
+    return { annual, rule:rate+'% (current bal)', avg:r2(fund.balance), qtrs:0, fallback:true };
   }
-  const annual = r2(avg * rate / 100);
-  return { annual, rule: rate + '% of 12-qtr avg', avg };
+  return { annual:r2(avg*rate/100), rule:rate+'% of '+qtrs+'-qtr avg', avg, qtrs };
 }
 
-async function renderSpendingPage() {
+function runCalculator() {
+  const fundId = document.getElementById('calc-fund')?.value;
+  const rate = parseFloat(document.getElementById('calc-rate')?.value||4.25);
+  const qtrs = parseInt(document.getElementById('calc-quarters')?.value||12);
+  const result = document.getElementById('calc-result');
+  if (!result) return;
+  if (!fundId) { result.innerHTML=''; return; }
+  const fund = allFunds.find(f=>f.id===fundId);
+  if (!fund) return;
+  const p = getFundAnnualPayout(fund, rate, qtrs);
+  const avgBal = p.avg !== null ? p.avg : r2(fund.balance);
+  // Show which quarters were used
+  const snaps = allSnapshots.filter(s=>s.fund_id===fundId).sort((a,b)=>a.snapshot_date>b.snapshot_date?1:-1);
+  const usedSnaps = snaps.slice(-qtrs);
+  const dateRange = usedSnaps.length>=2
+    ? fmtDate(usedSnaps[0].snapshot_date) + ' — ' + fmtDate(usedSnaps[usedSnaps.length-1].snapshot_date)
+    : 'Insufficient snapshot history';
+
+  result.innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:8px;">' +
+    '<div class="metric-card"><div class="metric-label">Average Balance</div><div class="metric-value" style="font-size:18px;">' + fmt(avgBal) + '</div><div class="metric-sub">' + (usedSnaps.length||'0') + ' quarters used</div></div>' +
+    '<div class="metric-card gold"><div class="metric-label">Annual Redemption</div><div class="metric-value" style="font-size:18px;">' + fmt(p.annual) + '</div><div class="metric-sub">' + rate + '% rate</div></div>' +
+    '<div class="metric-card green"><div class="metric-label">Quarterly Redemption</div><div class="metric-value" style="font-size:18px;">' + fmt(r2(p.annual/4)) + '</div></div>' +
+    '<div class="metric-card"><div class="metric-label">Monthly Redemption</div><div class="metric-value" style="font-size:18px;">' + fmt(r2(p.annual/12)) + '</div></div>' +
+    '</div>' +
+    '<div class="notice notice-info" style="margin-top:10px;font-size:12px;"><strong>Date range used:</strong> ' + dateRange + '</div>' +
+    (currentProfile.role==='admin' ?
+      '<div style="margin-top:10px;display:flex;gap:8px;">' +
+      '<button class="btn-gold" onclick="postCalculatedRedemption(\''+fundId+'\','+r2(p.annual/4)+',\'quarterly\')">Post as Quarterly Redemption</button>' +
+      '<button class="btn-secondary" onclick="postCalculatedRedemption(\''+fundId+'\','+r2(p.annual/12)+',\'monthly\')">Post as Monthly Redemption</button>' +
+      '</div>' : '');
+}
+
+async function postCalculatedRedemption(fundId, amount, freq) {
+  const fund = allFunds.find(f=>f.id===fundId);
+  if (!fund) return;
+  if (!confirm('Post a ' + freq + ' redemption of ' + fmt(amount) + ' from ' + fund.name + '?')) return;
+  const { error: txErr } = await sb.from('fund_transactions').insert({
+    fund_id: fundId, tx_date: new Date().toISOString().slice(0,10),
+    tx_type: 'Redemption', amount: -r2(amount),
+    note: freq.charAt(0).toUpperCase()+freq.slice(1)+' redemption — spending policy',
+    created_by: currentUser.email
+  });
+  if (txErr) { alert('Error: ' + txErr.message); return; }
+  await sb.from('funds').update({ balance: r2(r2(fund.balance)-r2(amount)) }).eq('id', fundId);
+  await loadData();
+  alert('Redemption posted to ' + fund.name + '.');
+  runCalculator();
+}
+
+async function renderCalculatorPage() {
   await loadSnapshots();
-  const activeFunds = allFunds.filter(f => f.status === 'active');
-  const isAdmin = currentProfile.role === 'admin';
-  let totalAnnual = 0, customCount = 0;
-  const snapCount = allSnapshots.length;
-  const uniqueQtrs = [...new Set(allSnapshots.map(s => s.snapshot_date))].length;
-
-  if (snapCount === 0) {
-    document.getElementById('sp-history-notice').style.display = '';
-    document.getElementById('sp-history-notice').innerHTML =
-      '<strong>No quarterly snapshots yet.</strong> Payout amounts are estimated from current balances. ' +
-      'Post a quarterly return or run <strong>Admin → Setup & Backups → Backfill Test History</strong> to seed 16 quarters of synthetic history.';
-  } else {
-    document.getElementById('sp-history-notice').style.display = 'none';
+  // Populate fund selector
+  const sel = document.getElementById('calc-fund');
+  if (sel && sel.options.length <= 1) {
+    allFunds.filter(f=>f.status==='active').forEach(f => {
+      const o = document.createElement('option');
+      o.value = f.id; o.textContent = f.name;
+      sel.appendChild(o);
+    });
   }
-
+  // Summary table
+  const rate = parseFloat(document.getElementById('summary-rate')?.value||4.25);
+  const qtrs = parseInt(document.getElementById('summary-quarters')?.value||12);
+  const activeFunds = allFunds.filter(f=>f.status==='active');
+  const isAdmin = currentProfile.role==='admin';
+  let totalAnnual = 0;
+  const snapCount = allSnapshots.length;
+  const notice = document.getElementById('sp-history-notice');
+  if (notice) {
+    if (!snapCount) {
+      notice.style.display='';
+      notice.innerHTML='<strong>No quarterly snapshots yet.</strong> Run the backfill from Setup & Backups to seed historical data.';
+    } else { notice.style.display='none'; }
+  }
   const rows = activeFunds.map(fund => {
-    const p = getFundAnnualPayout(fund);
-    totalAnnual += p.annual;
+    const p = getFundAnnualPayout(fund, rate, qtrs);
+    totalAnnual = r2(totalAnnual + p.annual);
     const isCustom = fund.payout_fixed || fund.payout_rate;
-    if (isCustom) customCount++;
     return '<tr>' +
       '<td style="font-weight:500;">' + esc(fund.name) + '</td>' +
       '<td class="td-right">' + fmt(fund.balance) + '</td>' +
-      '<td class="td-right">' + (p.avg !== null ? fmt(p.avg) : '<span class="text-muted">—</span>') + '</td>' +
-      '<td>' + (isCustom ? '<span class="badge badge-amber">Custom</span> ' : '') + esc(p.rule) + '</td>' +
+      '<td class="td-right">' + (p.avg!==null?fmt(p.avg):'<span class="text-muted">—</span>') + '</td>' +
+      '<td class="td-right">' + (p.qtrs||'—') + '</td>' +
+      '<td>' + (isCustom?'<span class="badge badge-amber">Custom</span> ':'') + esc(p.rule) + '</td>' +
       '<td class="td-right" style="font-weight:600;color:var(--navy);">' + fmt(p.annual) + '</td>' +
-      '<td class="td-right">' + fmt(r2(p.annual / 4)) + '</td>' +
-      (isAdmin ? '<td><button class="btn-ghost btn-sm" onclick="openFundModal(\'' + fund.id + '\')">Edit Rule</button></td>' : '<td></td>') +
+      '<td class="td-right">' + fmt(r2(p.annual/4)) + '</td>' +
+      '<td class="td-right">' + fmt(r2(p.annual/12)) + '</td>' +
+      (isAdmin ? '<td><button class="btn-ghost btn-sm" onclick="openFundModal(\''+fund.id+'\')">Edit Rule</button></td>' : '<td></td>') +
       '</tr>';
   });
-
-  document.getElementById('sp-total-annual').textContent = fmt(totalAnnual);
-  document.getElementById('sp-total-quarterly').textContent = fmt(r2(totalAnnual / 4));
-  document.getElementById('sp-custom-count').textContent = customCount;
-  document.getElementById('spending-tbody').innerHTML = rows.join('') || '<tr><td colspan="7" class="text-center text-muted" style="padding:20px;">No active funds</td></tr>';
-}
-
-// Snapshot all fund balances (called when posting a return)
-async function snapshotAllFundBalances(snapshotDate) {
-  const activeFunds = allFunds.filter(f => f.status === 'active');
-  const inserts = activeFunds.map(f => ({
-    fund_id: f.id, snapshot_date: snapshotDate, balance: r2(f.balance), created_by: currentUser.email
-  }));
-  if (!inserts.length) return;
-  // upsert so duplicate dates are ignored
-  await sb.from('fund_balance_snapshots').upsert(inserts, { onConflict: 'fund_id,snapshot_date', ignoreDuplicates: true });
+  document.getElementById('spending-tbody').innerHTML = rows.join('') || '<tr><td colspan="9" class="text-center text-muted" style="padding:20px;">No active funds</td></tr>';
+  const annualEl = document.getElementById('sp-total-annual');
+  const qtrEl = document.getElementById('sp-total-quarterly');
+  if (annualEl) annualEl.textContent = fmt(totalAnnual);
+  if (qtrEl) qtrEl.textContent = fmt(r2(totalAnnual/4));
 }
 
 // Backfill 16 quarters of synthetic history ($95M total, 6%/yr growth, equal split across active funds)
@@ -2415,7 +2489,7 @@ async function backfillTestHistory() {
   }
   await loadData();
   alert('Backfill complete! 16 quarters of history seeded. Total invested value: ' + fmt(currentTotal) + ' across ' + n + ' funds.');
-  renderSpendingPage();
+  renderCalculatorPage();
 }
 
 // ─── MODAL HELPERS ────────────────────────────────────────────────────────────
