@@ -1561,7 +1561,7 @@ function openPostReturnModal() {
 
   document.getElementById('pool-modal-title').textContent = 'Post Monthly Return';
   document.getElementById('pool-modal-body').innerHTML =
-    '<div class="notice notice-info" style="margin-bottom:14px;">Enter the gain or loss for each pool this month. Each pool's return will be distributed pro-rata to its funds based on their current balances.</div>' +
+    '<div class="notice notice-info" style="margin-bottom:14px;">Enter the gain or loss for each pool this month. Each pool\'s return will be distributed pro-rata to its funds based on their current balances.</div>' +
     '<div class="form-grid">' +
     '<div class="form-row"><label>Return Date *</label><input type="date" id="pr-date" value="' + new Date().toISOString().slice(0,10) + '"></div>' +
     '<div class="form-row"><label>Pool *</label><select id="pr-pool" onchange="updateReturnPreview()">' + poolOptions + '</select></div>' +
