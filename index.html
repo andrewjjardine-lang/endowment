@@ -313,10 +313,10 @@ const CONFIG = {
     <div class="nav-section">
       <div class="nav-section-label">Operations</div>
       <div class="nav-item" data-page="subscriptions"><span class="nav-icon">&#8679;</span> Subscriptions</div>
-      <div class="nav-item" data-page="redemptions"><span class="nav-icon">&#8681;</span> Payouts</div>
+      <div class="nav-item" data-page="redemptions"><span class="nav-icon">&#8681;</span> Redemptions</div>
       <div class="nav-item" data-page="pools"><span class="nav-icon">&#9650;</span> Investment Pools</div>
       <div class="nav-item" data-page="reports"><span class="nav-icon">&#9635;</span> Reports</div>
-      <div class="nav-item" data-page="calculator"><span class="nav-icon">&#9670;</span> Spending Policy</div>
+      <div class="nav-item" data-page="calculator"><span class="nav-icon">&#9670;</span> Redemption Calculator</div>
     </div>
     <div class="nav-section" id="admin-nav">
       <div class="nav-section-label">Admin</div>
@@ -463,7 +463,7 @@ const CONFIG = {
         <div class="card-header"><h3>Recent Pool Returns</h3></div>
         <div class="table-wrap"><table>
           <thead><tr><th>Date</th><th>Pool</th><th>Amount</th><th>Note</th><th>Posted By</th><th class="admin-only"></th></tr></thead>
-          <tbody id="returns-tbody"><tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr></tbody>
+          <tbody id="returns-tbody"></tbody>
         </table></div>
       </div>
     </div>
