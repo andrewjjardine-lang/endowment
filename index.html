@@ -2516,4 +2516,83 @@ function setCrestImages() {
 }
 </script>
 </body>
-</html>
+</html>async function renderPoolsGrid() {
+  const grid = document.getElementById('pools-grid');
+  if (!allPools.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">&#9650;</div><p>No investment pools yet.</p></div>';
+    return;
+  }
+  const isAdmin = currentProfile.role === 'admin';
+
+  // Fetch pool returns safely
+  let allReturns = [];
+  try {
+    const { data, error } = await sb.from('pool_returns').select('*').order('return_date', {ascending:false}).limit(100000);
+    if (!error) allReturns = data || [];
+  } catch(e) { console.error('pool_returns fetch error:', e); }
+
+  const yearStart = new Date().getFullYear() + '-01-01';
+
+  grid.innerHTML = allPools.map(function(pool) {
+    var fundCount = allFunds.filter(function(f){return f.pool_id===pool.id&&f.status==='active';}).length;
+    var totalAlloc = allFunds.filter(function(f){return f.pool_id===pool.id;}).reduce(function(s,f){return s+r2(f.balance);},0);
+    var poolReturns = allReturns.filter(function(r){return r.pool_id===pool.id;});
+    var ytdReturn = poolReturns.filter(function(r){return r.return_date>=yearStart;}).reduce(function(s,r){return s+r2(r.gross_return);},0);
+    var lastReturn = poolReturns[0];
+    var ytdColor = ytdReturn>=0 ? 'var(--green)' : 'var(--red)';
+    var statusBadge = pool.status==='active' ? 'badge-green' : 'badge-gray';
+
+    var card = '<div class="card">';
+    card += '<div class="card-header"><h3>' + esc(pool.name) + '</h3>';
+    card += '<span class="badge ' + statusBadge + '">' + esc(pool.status) + '</span></div>';
+    card += '<div class="card-body">';
+    card += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">';
+    card += '<div><div class="metric-label">Total Allocated</div>';
+    card += '<div style="font-family:'Libre Baskerville',serif;font-size:20px;color:var(--navy);">' + fmt(totalAlloc) + '</div></div>';
+    card += '<div><div class="metric-label">Funds in Pool</div>';
+    card += '<div style="font-size:20px;font-weight:500;">' + fundCount + '</div></div>';
+    card += '<div><div class="metric-label">YTD Return</div>';
+    card += '<div style="font-size:15px;color:' + ytdColor + ';font-weight:600;">' + fmt(ytdReturn) + '</div></div>';
+    card += '<div><div class="metric-label">Last Return Posted</div>';
+    card += '<div style="font-size:12px;">' + (lastReturn ? fmtDate(lastReturn.return_date) + ' &nbsp; ' + fmt(lastReturn.gross_return) : '—') + '</div></div>';
+    card += '</div>';
+    if (isAdmin) {
+      card += '<button class="btn-ghost btn-sm" onclick="openPoolModal('' + pool.id + '')">Edit Pool</button>';
+    }
+    card += '</div></div>';
+    return card;
+  }).join('');
+
+  renderReturnsTable(allReturns);
+}
+function renderReturnsTable(returns) {
+  const tbody = document.getElementById('returns-tbody');
+  if (!tbody) return;
+  if (!returns.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:20px;">No returns posted yet</td></tr>';
+    return;
+  }
+  const isAdmin = currentProfile.role === 'admin';
+  tbody.innerHTML = '';
+  returns.slice(0,50).forEach(function(r) {
+    const pool = allPools.find(function(p){return p.id===r.pool_id;});
+    const tr = document.createElement('tr');
+    const amtColor = r2(r.gross_return)>=0 ? 'var(--green)' : 'var(--red)';
+    tr.innerHTML =
+      '<td>' + fmtDate(r.return_date) + '</td>' +
+      '<td>' + esc(pool ? pool.name : '—') + '</td>' +
+      '<td style="font-weight:600;color:' + amtColor + ';">' + fmt(r.gross_return) + '</td>' +
+      '<td>' + esc(r.note||'—') + '</td>' +
+      '<td class="text-muted">' + esc(r.created_by||'—') + '</td>' +
+      '<td></td>';
+    if (isAdmin) {
+      const btn = document.createElement('button');
+      btn.className = 'btn-danger btn-sm';
+      btn.textContent = 'Delete';
+      btn.onclick = function() { deletePoolReturn(r.id, r.pool_id); };
+      tr.cells[5].appendChild(btn);
+    }
+    tbody.appendChild(tr);
+  });
+}
+
