@@ -1554,25 +1554,25 @@ async function savePool() {
 }
 
 function openPostReturnModal() {
-  const poolOptions = allPools.filter(p=>p.status==='active').map(p => {
-    const totalAlloc = allFunds.filter(f=>f.pool_id===p.id).reduce((s,f)=>s+r2(f.balance),0);
+  var poolOptions = allPools.filter(function(p){return p.status==='active';}).map(function(p) {
+    var totalAlloc = allFunds.filter(function(f){return f.pool_id===p.id;}).reduce(function(s,f){return s+r2(f.balance);},0);
     return '<option value="' + p.id + '">' + esc(p.name) + ' (' + fmt(totalAlloc) + ' allocated)</option>';
   }).join('');
 
   document.getElementById('pool-modal-title').textContent = 'Post Monthly Return';
-  document.getElementById('pool-modal-body').innerHTML =
-    '<div class="notice notice-info" style="margin-bottom:14px;">Enter the gain or loss for each pool this month. Each pool\'s return will be distributed pro-rata to its funds based on their current balances.</div>' +
-    '<div class="form-grid">' +
-    '<div class="form-row"><label>Return Date *</label><input type="date" id="pr-date" value="' + new Date().toISOString().slice(0,10) + '"></div>' +
-    '<div class="form-row"><label>Pool *</label><select id="pr-pool" onchange="updateReturnPreview()">' + poolOptions + '</select></div>' +
-    '<div class="form-row"><label>Gain / Loss Amount (CAD) *</label><input type="number" step="0.01" id="pr-amount" placeholder="Enter negative for a loss" oninput="updateReturnPreview()"></div>' +
-    '<div class="form-row"><label>Note</label><input id="pr-note" placeholder="e.g. April 2026 — RBC statement"></div>' +
-    '</div>' +
-    '<div id="pr-preview" style="margin-top:12px;"></div>' +
-    '<div class="form-actions">' +
-    '<button class="btn-secondary" onclick="closeModal(\\'modal-pool\\')">Cancel</button>' +
-    '<button class="btn-gold" onclick="postMonthlyReturn()">Post Return</button>' +
-    '</div>';
+  var html = '<div class="notice notice-info" style="margin-bottom:14px;">Enter the gain or loss for this pool. It will be distributed pro-rata to all funds in the pool.</div>';
+  html += '<div class="form-grid">';
+  html += '<div class="form-row"><label>Return Date *</label><input type="date" id="pr-date" value="' + new Date().toISOString().slice(0,10) + '"></div>';
+  html += '<div class="form-row"><label>Pool *</label><select id="pr-pool" onchange="updateReturnPreview()">' + poolOptions + '</select></div>';
+  html += '<div class="form-row"><label>Gain / Loss Amount (CAD) *</label><input type="number" step="0.01" id="pr-amount" placeholder="Enter negative for a loss" oninput="updateReturnPreview()"></div>';
+  html += '<div class="form-row"><label>Note</label><input id="pr-note" placeholder="e.g. April 2026 statement"></div>';
+  html += '</div>';
+  html += '<div id="pr-preview" style="margin-top:12px;"></div>';
+  html += '<div class="form-actions">';
+  html += '<button class="btn-secondary" onclick="closeModal(\'modal-pool\')">Cancel</button>';
+  html += '<button class="btn-gold" onclick="postMonthlyReturn()">Post Return</button>';
+  html += '</div>';
+  document.getElementById('pool-modal-body').innerHTML = html;
   updateReturnPreview();
   openModal('modal-pool');
 }
