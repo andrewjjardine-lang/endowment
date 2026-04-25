@@ -937,6 +937,8 @@ function openFundModal(id) {
   h+='<div class="form-row"><label>Fixed Monthly Redemption (CAD)</label><input type="number" step="0.01" id="f-fixed-redemption" value="'+esc(fund?fund.fixed_redemption||'':'')+'"></div>';
   h+='<div class="form-row"><label>Custom Payout Rate (%)</label><input type="number" step="0.01" id="f-payout-rate" value="'+esc(fund?fund.payout_rate||'':'')+'"><div class="text-muted" style="font-size:11px;margin-top:3px;">Overrides default 4.25%</div></div>';
   h+='<div class="form-row full"><label>Fixed Annual Payout (CAD)</label><input type="number" step="0.01" id="f-payout-fixed" value="'+esc(fund?fund.payout_fixed||'':'')+'"><div class="text-muted" style="font-size:11px;margin-top:3px;">Fixed amount takes priority over rate</div></div>';
+  var autoRed=fund?(fund.auto_redemptions===false?false:true):true;
+  h+='<div class="form-row full"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;font-weight:500;color:var(--gray-800);cursor:pointer;"><input type="checkbox" id="f-auto-redemptions" style="width:auto;margin:0;"'+(autoRed?' checked':'')+'>Included in automatic redemption calculations</label><div class="text-muted" style="font-size:11px;margin-top:3px;padding-left:22px;">Uncheck to exclude this fund from the Redemption Calculator summary</div></div>';
   h+='</div>';
   h+='<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-fund\')">Cancel</button><button class="btn-primary" onclick="saveFund(\''+(id||'')+'\')">Save Fund</button></div>';
   document.getElementById('fund-modal-body').innerHTML=h;
@@ -946,7 +948,8 @@ function openFundModal(id) {
 async function saveFund(editingId) {
   var name=(document.getElementById('f-name').value||'').trim();
   if(!name) return alert('Fund name is required.');
-  var data={name:name,category:document.getElementById('f-category').value.trim(),pool_id:document.getElementById('f-pool').value||null,established_date:document.getElementById('f-date').value||null,status:document.getElementById('f-status').value,restrictions:document.getElementById('f-restrictions').value.trim(),notes:document.getElementById('f-notes').value.trim(),fixed_redemption:document.getElementById('f-fixed-redemption').value?r2(document.getElementById('f-fixed-redemption').value):null,payout_rate:document.getElementById('f-payout-rate').value?parseFloat(document.getElementById('f-payout-rate').value):null,payout_fixed:document.getElementById('f-payout-fixed').value?r2(document.getElementById('f-payout-fixed').value):null,created_by:currentUser.email};
+  var autoRedEl=document.getElementById('f-auto-redemptions');
+  var data={name:name,category:document.getElementById('f-category').value.trim(),pool_id:document.getElementById('f-pool').value||null,established_date:document.getElementById('f-date').value||null,status:document.getElementById('f-status').value,restrictions:document.getElementById('f-restrictions').value.trim(),notes:document.getElementById('f-notes').value.trim(),fixed_redemption:document.getElementById('f-fixed-redemption').value?r2(document.getElementById('f-fixed-redemption').value):null,payout_rate:document.getElementById('f-payout-rate').value?parseFloat(document.getElementById('f-payout-rate').value):null,payout_fixed:document.getElementById('f-payout-fixed').value?r2(document.getElementById('f-payout-fixed').value):null,auto_redemptions:autoRedEl?autoRedEl.checked:true,created_by:currentUser.email};
   var res=editingId?await sb.from('funds').update(data).eq('id',editingId):await sb.from('funds').insert(Object.assign({balance:0},data));
   if(res.error){alert('Error: '+res.error.message);return;}
   closeModal('modal-fund'); await loadData(); renderFundsTable();
@@ -960,7 +963,7 @@ async function openFundDetail(fundId) {
   var page=document.getElementById('page-fund-detail');
   page.innerHTML='';
   var hdr=document.createElement('div'); hdr.className='fund-detail-header';
-  hdr.innerHTML='<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;"><div><h2>'+esc(fund.name)+'</h2>'+(fund.category?'<div style="color:rgba(255,255,255,.55);font-size:13px;margin-top:3px;">'+esc(fund.category)+'</div>':'')+'</div><button class="btn-secondary btn-sm no-print" onclick="navigateTo(\'funds\')">&#8592; Back</button></div><div class="fund-detail-meta"><div class="meta-item">Balance<span>'+fmt(fund.balance)+'</span></div><div class="meta-item">Pool<span>'+esc(fund.pool?fund.pool.name:'--')+'</span></div><div class="meta-item">Status<span>'+esc(fund.status)+'</span></div></div>';
+  hdr.innerHTML='<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;"><div><h2>'+esc(fund.name)+'</h2>'+(fund.category?'<div style="color:rgba(255,255,255,.55);font-size:13px;margin-top:3px;">'+esc(fund.category)+'</div>':'')+'</div><button class="btn-secondary btn-sm no-print" onclick="navigateTo(\'funds\')">&#8592; Back</button></div><div class="fund-detail-meta"><div class="meta-item">Balance<span>'+fmt(fund.balance)+'</span></div><div class="meta-item">Pool<span>'+esc(fund.pool?fund.pool.name:'--')+'</span></div><div class="meta-item">Status<span>'+esc(fund.status)+'</span></div>'+(fund.auto_redemptions===false?'<div class="meta-item">Redemptions<span style="color:#f5c842;">No automatic</span></div>':'')+'</div>';
   page.appendChild(hdr);
   if(fund.restrictions){var n=document.createElement('div');n.className='notice notice-info';n.innerHTML='<strong>Restrictions:</strong> '+esc(fund.restrictions);page.appendChild(n);}
   // Chart section
@@ -1457,7 +1460,7 @@ async function renderCalculatorPage() {
   ['calc-fund','calc-fund-fixed'].forEach(function(selId){
     var sel=document.getElementById(selId); if(!sel) return;
     var cur=sel.value;
-    sel.innerHTML='<option value="">-- Select fund --</option>'+allFunds.filter(function(f){return f.status==='active';}).map(function(f){return '<option value="'+f.id+'">'+esc(f.name)+'</option>';}).join('');
+    sel.innerHTML='<option value="">-- Select fund --</option>'+allFunds.filter(function(f){return f.status==='active'&&(selId==='calc-fund'?f.auto_redemptions!==false:true);}).map(function(f){return '<option value="'+f.id+'">'+esc(f.name)+'</option>';}).join('');
     if(cur) sel.value=cur;
   });
   renderSummaryTable();
@@ -1468,7 +1471,7 @@ function renderSummaryTable() {
   var fromDate=document.getElementById('summary-date-from')?document.getElementById('summary-date-from').value:'';
   var toDate=document.getElementById('summary-date-to')?document.getElementById('summary-date-to').value:'';
   var freq=document.getElementById('summary-frequency')?document.getElementById('summary-frequency').value:'quarterly';
-  var activeFunds=allFunds.filter(function(f){return f.status==='active';});
+  var activeFunds=allFunds.filter(function(f){return f.status==='active'&&f.auto_redemptions!==false;});
   var isAdmin=currentProfile.role==='admin';
   var totalAnnual=0;
   var notice=document.getElementById('sp-history-notice');
