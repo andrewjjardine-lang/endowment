@@ -1489,1034 +1489,8 @@ async function processPayoutDecision(approved) {
 }
 
 // ─── INVESTMENT POOLS ─────────────────────────────────────────────────────────
-function renderPoolsGrid() {
-  const grid = document.getElementById('pools-grid');
-  if (!allPools.length) { grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">&#9650;</div><p>No investment pools yet.</p></div>'; return; }
-  const isAdmin = currentProfile.role === 'admin';
-  grid.innerHTML = allPools.map(pool => {
-    const fundCount = allFunds.filter(f=>f.pool_id===pool.id&&f.status==='active').length;
-    const totalAlloc = allFunds.filter(f=>f.pool_id===pool.id).reduce((s,f)=>s+r2(f.balance),0);
-    return '<div class="card">' +
-      '<div class="card-header"><h3>' + esc(pool.name) + '</h3>' +
-      '<span class="badge ' + (pool.status==='active'?'badge-green':'badge-gray') + '">' + esc(pool.status) + '</span></div>' +
-      '<div class="card-body">' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">' +
-      '<div><div class="metric-label">Pool Value</div><div style="font-family:\'Libre Baskerville\',serif;font-size:18px;color:var(--navy);">' + fmt(pool.current_value) + '</div></div>' +
-      '<div><div class="metric-label">Allocated Funds</div><div style="font-size:16px;font-weight:500;">' + fmt(totalAlloc) + '</div></div>' +
-      '<div><div class="metric-label">Funds in Pool</div><div style="font-size:16px;">' + fundCount + '</div></div>' +
-      '<div><div class="metric-label">Manager</div><div style="font-size:13px;">' + esc(pool.manager||'—') + '</div></div>' +
-      '</div>' +
-      (pool.description ? '<div class="text-muted" style="font-size:12px;margin-bottom:10px;">' + esc(pool.description) + '</div>' : '') +
-      (isAdmin ? '<div style="display:flex;gap:6px;">' +
-        '<button class="btn-gold btn-sm" onclick="openReturnModal(\'' + pool.id + '\')">Post Return</button>' +
-        '<button class="btn-ghost btn-sm" onclick="openPoolModal(\'' + pool.id + '\')">Edit</button>' +
-        '</div>' : '') +
-      '</div></div>';
-  }).join('');
-}
 
-function openPoolModal(id) {
-  editingPoolId = id || null;
-  const pool = id ? allPools.find(p=>p.id===id) : null;
-  document.getElementById('pool-modal-title').textContent = id ? 'Edit Pool' : 'New Investment Pool';
-  document.getElementById('pool-modal-body').innerHTML =
-    '<div class="form-grid">' +
-    '<div class="form-row full"><label>Pool Name *</label><input id="po-name" value="' + esc(pool?.name||'') + '" placeholder="e.g. RBC Balanced Portfolio"></div>' +
-    '<div class="form-row"><label>Manager</label><input id="po-manager" value="' + esc(pool?.manager||'') + '" placeholder="e.g. RBC Wealth Management"></div>' +
-    '<div class="form-row"><label>Current Market Value</label><input type="number" step="0.01" id="po-value" value="' + (pool?.current_value||'') + '" placeholder="0.00"></div>' +
-    '<div class="form-row"><label>Status</label><select id="po-status"><option value="active"'+((!pool||pool.status==='active')?' selected':'')+'>Active</option><option value="closed"'+(pool?.status==='closed'?' selected':'')+'>Closed</option></select></div>' +
-    '<div class="form-row full"><label>Description</label><textarea id="po-desc">' + esc(pool?.description||'') + '</textarea></div>' +
-    '</div>' +
-    '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-pool\')">Cancel</button><button class="btn-primary" onclick="savePool()">Save Pool</button></div>';
-  openModal('modal-pool');
-}
-
-async function savePool() {
-  const name = document.getElementById('po-name').value.trim();
-  if (!name) return alert('Pool name is required.');
-  const data = {
-    name, manager: document.getElementById('po-manager').value.trim(),
-    current_value: r2(document.getElementById('po-value').value),
-    status: document.getElementById('po-status').value,
-    description: document.getElementById('po-desc').value.trim(),
-    created_by: currentUser.email
-  };
-  let err;
-  if (editingPoolId) {
-    ({ error: err } = await sb.from('investment_pools').update(data).eq('id', editingPoolId));
-  } else {
-    ({ error: err } = await sb.from('investment_pools').insert(data));
-  }
-  if (err) { alert('Error: ' + err.message); return; }
-  closeModal('modal-pool');
-  await loadData();
-  renderPoolsGrid();
-}
-
-function openPostReturnModal() {
-  var poolOptions = allPools.filter(function(p){return p.status==='active';}).map(function(p) {
-    var totalAlloc = allFunds.filter(function(f){return f.pool_id===p.id;}).reduce(function(s,f){return s+r2(f.balance);},0);
-    return '<option value="' + p.id + '">' + esc(p.name) + ' (' + fmt(totalAlloc) + ' allocated)</option>';
-  }).join('');
-
-  document.getElementById('pool-modal-title').textContent = 'Post Monthly Return';
-  var html = '<div class="notice notice-info" style="margin-bottom:14px;">Enter the gain or loss for this pool. It will be distributed pro-rata to all funds in the pool.</div>';
-  html += '<div class="form-grid">';
-  html += '<div class="form-row"><label>Return Date *</label><input type="date" id="pr-date" value="' + new Date().toISOString().slice(0,10) + '"></div>';
-  html += '<div class="form-row"><label>Pool *</label><select id="pr-pool" onchange="updateReturnPreview()">' + poolOptions + '</select></div>';
-  html += '<div class="form-row"><label>Gain / Loss Amount (CAD) *</label><input type="number" step="0.01" id="pr-amount" placeholder="Enter negative for a loss" oninput="updateReturnPreview()"></div>';
-  html += '<div class="form-row"><label>Note</label><input id="pr-note" placeholder="e.g. April 2026 statement"></div>';
-  html += '</div>';
-  html += '<div id="pr-preview" style="margin-top:12px;"></div>';
-  html += '<div class="form-actions">';
-  html += '<button class="btn-secondary" onclick="closeModal(\'modal-pool\')">Cancel</button>';
-  html += '<button class="btn-gold" onclick="postMonthlyReturn()">Post Return</button>';
-  html += '</div>';
-  document.getElementById('pool-modal-body').innerHTML = html;
-  updateReturnPreview();
-  openModal('modal-pool');
-}
-
-function updateReturnPreview() {
-  const poolId = document.getElementById('pr-pool')?.value;
-  const gross = r2(document.getElementById('pr-amount')?.value || 0);
-  const preview = document.getElementById('pr-preview');
-  if (!preview || !poolId || !gross) { if(preview) preview.innerHTML=''; return; }
-  const poolFunds = allFunds.filter(f=>f.pool_id===poolId&&f.status==='active');
-  const totalBal = poolFunds.reduce((s,f)=>s+r2(f.balance),0);
-  if (!poolFunds.length || !totalBal) { preview.innerHTML = '<div class="notice notice-warn">No active funds in this pool.</div>'; return; }
-  let rows = poolFunds.map(f => {
-    const share = r2(f.balance)/totalBal;
-    const alloc = r2(gross*share);
-    return '<tr><td>' + esc(f.name) + '</td><td class="td-right">' + fmt(f.balance) + '</td>' +
-      '<td class="td-right">' + (share*100).toFixed(1) + '%</td>' +
-      '<td class="td-right" style="font-weight:600;color:' + (alloc>=0?'var(--green)':'var(--red)') + ';">' + fmt(alloc) + '</td></tr>';
-  }).join('');
-  preview.innerHTML = '<div style="font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Allocation Preview</div>' +
-    '<div class="table-wrap"><table><thead><tr><th>Fund</th><th class="td-right">Balance</th><th class="td-right">Share</th><th class="td-right">Allocation</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
-}
-
-async function postMonthlyReturn() {
-  const poolId = document.getElementById('pr-pool').value;
-  const date = document.getElementById('pr-date').value;
-  const gross = r2(document.getElementById('pr-amount').value);
-  const note = document.getElementById('pr-note').value.trim();
-  if (!poolId || !date || gross === 0) return alert('Pool, date and amount are required.');
-  const poolFunds = allFunds.filter(f=>f.pool_id===poolId&&f.status==='active');
-  const totalBal = poolFunds.reduce((s,f)=>s+r2(f.balance),0);
-  if (!poolFunds.length) return alert('No active funds in this pool.');
-
-  // Insert pool return record
-  const { data: retData, error: retErr } = await sb.from('pool_returns')
-    .upsert({ pool_id:poolId, return_date:date, gross_return:gross, note, created_by:currentUser.email },
-             { onConflict:'pool_id,return_date' })
-    .select().single();
-  if (retErr) { alert('Error: ' + retErr.message); return; }
-
-  // Allocate to each fund and post transactions
-  const txInserts = [], allocInserts = [];
-  poolFunds.forEach(f => {
-    const share = totalBal > 0 ? r2(f.balance)/totalBal : 0;
-    const alloc = r2(gross * share);
-    if (alloc === 0) return;
-    txInserts.push({ fund_id:f.id, tx_date:date, tx_type:'Return Allocation', amount:alloc,
-      note:(note||'Pool return') + ' — ' + (gross>=0?'Gain':'Loss'), created_by:currentUser.email });
-    allocInserts.push({ pool_return_id:retData.id, fund_id:f.id, allocated_amount:alloc, fund_balance_at_time:r2(f.balance) });
-  });
-
-  if (txInserts.length) {
-    const { error: txErr } = await sb.from('fund_transactions').insert(txInserts);
-    if (txErr) { alert('Transaction error: ' + txErr.message); return; }
-    if (allocInserts.length) await sb.from('return_allocations').insert(allocInserts);
-    // Update fund balances and snapshot
-    for (const tx of txInserts) {
-      const fund = allFunds.find(f=>f.id===tx.fund_id);
-      await sb.from('funds').update({ balance: r2((fund?.balance||0)+tx.amount) }).eq('id', tx.fund_id);
-    }
-    await snapshotAllFundBalances(date);
-  }
-  closeModal('modal-pool');
-  await loadData();
-  renderPoolsGrid();
-  renderDashboard();
-  alert('Return posted and allocated to ' + txInserts.length + ' funds.');
-}
-
-async function deletePoolReturn(returnId, poolId) {
-  if (!confirm('Delete this return entry? This will NOT reverse the fund balance allocations — use transaction edit/delete for that.')) return;
-  await sb.from('pool_returns').delete().eq('id', returnId);
-  await loadData();
-  renderPoolsGrid();
-}
-
-
-
-// ─── REPORTS ─────────────────────────────────────────────────────────────────
-function renderReport() {
-  const type = document.getElementById('report-type').value;
-  const from = document.getElementById('report-from').value;
-  const to = document.getElementById('report-to').value;
-  const out = document.getElementById('report-output');
-  if (type === 'consolidated') {
-    renderConsolidatedReport(from, to, out);
-  } else {
-    const fundId = document.getElementById('report-fund-id').value;
-    renderFundStatement(fundId, from, to, out);
-  }
-}
-
-function renderConsolidatedReport(from, to, out) {
-  const txInRange = allTransactions.filter(t=>t.tx_date>=from&&t.tx_date<=to);
-  const totalAUM = allFunds.reduce((s,f)=>s+r2(f.balance),0);
-  const contribTotal = txInRange.filter(t=>t.tx_type==='Subscription').reduce((s,t)=>s+r2(t.amount),0);
-  const payoutTotal = Math.abs(txInRange.filter(t=>t.tx_type==='Redemption').reduce((s,t)=>s+r2(t.amount),0));
-  const returnTotal = txInRange.filter(t=>t.tx_type==='Return Allocation').reduce((s,t)=>s+r2(t.amount),0);
-  let html =
-    '<div class="card" style="margin-bottom:16px;">' +
-    '<div class="card-header"><h3>Consolidated Endowment Report</h3><div class="text-muted">' + fmtDate(from) + ' — ' + fmtDate(to) + '</div></div>' +
-    '<div class="card-body">' +
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;">' +
-    '<div class="metric-card"><div class="metric-label">Total AUM</div><div class="metric-value">' + fmt(totalAUM) + '</div></div>' +
-    '<div class="metric-card green"><div class="metric-label">Subscriptions</div><div class="metric-value">' + fmt(contribTotal) + '</div></div>' +
-    '<div class="metric-card amber"><div class="metric-label">Redemptions</div><div class="metric-value">' + fmt(payoutTotal) + '</div></div>' +
-    '<div class="metric-card gold"><div class="metric-label">Returns Allocated</div><div class="metric-value">' + fmt(returnTotal) + '</div></div>' +
-    '</div>' +
-    '</div></div>';
-  // Fund breakdown table
-  html += '<div class="card"><div class="card-header"><h3>Fund Breakdown</h3></div><div class="table-wrap"><table>';
-  html += '<thead><tr><th>Fund</th><th>Category</th><th>Pool</th><th class="td-right">Balance</th><th class="td-right">Subscriptions</th><th class="td-right">Redemptions</th><th class="td-right">Returns</th></tr></thead><tbody>';
-  allFunds.forEach(f => {
-    const ftxs = txInRange.filter(t=>t.fund_id===f.id);
-    const fc = ftxs.filter(t=>t.tx_type==='Subscription').reduce((s,t)=>s+r2(t.amount),0);
-    const fp = Math.abs(ftxs.filter(t=>t.tx_type==='Redemption').reduce((s,t)=>s+r2(t.amount),0));
-    const fr = ftxs.filter(t=>t.tx_type==='Return Allocation').reduce((s,t)=>s+r2(t.amount),0);
-    html += '<tr><td style="font-weight:500;">' + esc(f.name) + '</td><td>' + esc(f.category||'—') + '</td><td>' + esc(f.pool?.name||'—') + '</td><td class="td-right">' + fmt(f.balance) + '</td><td class="td-right" style="color:var(--green);">' + fmt(fc) + '</td><td class="td-right" style="color:var(--red);">' + (fp?fmt(fp):'—') + '</td><td class="td-right" style="color:var(--navy);">' + (fr?fmt(fr):'—') + '</td></tr>';
-  });
-  html += '</tbody></table></div></div>';
-  out.innerHTML = html;
-}
-
-function renderFundStatement(fundId, from, to, out) {
-  const fund = allFunds.find(f=>f.id===fundId);
-  if (!fund) { out.innerHTML = '<div class="notice notice-error">Fund not found.</div>'; return; }
-  const txs = allTransactions.filter(t=>t.fund_id===fundId && t.tx_date>=from && t.tx_date<=to);
-  const openBal = r2(fund.balance) - txs.reduce((s,t)=>s+r2(t.amount),0);
-  let html =
-    '<div class="card">' +
-    '<div class="card-header" style="flex-direction:column;align-items:flex-start;">' +
-    '<h3>' + esc(fund.name) + ' — Fund Statement</h3>' +
-    '<div class="text-muted">' + fmtDate(from) + ' — ' + fmtDate(to) + '</div>' +
-    (fund.restrictions ? '<div style="font-size:12px;color:var(--amber);margin-top:4px;"><strong>Restrictions:</strong> ' + esc(fund.restrictions) + '</div>' : '') +
-    '</div>' +
-    '<div class="card-body">' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px;">' +
-    '<div class="metric-card"><div class="metric-label">Opening Balance</div><div class="metric-value">' + fmt(openBal) + '</div></div>' +
-    '<div class="metric-card"><div class="metric-label">Closing Balance</div><div class="metric-value">' + fmt(fund.balance) + '</div></div>' +
-    '<div class="metric-card gold"><div class="metric-label">Net Change</div><div class="metric-value">' + fmt(r2(fund.balance)-openBal) + '</div></div>' +
-    '</div>' +
-    '<div class="table-wrap"><table>' +
-    '<thead><tr><th>Date</th><th>Type</th><th>Donor / Source</th><th class="td-right">Amount</th><th>Note</th></tr></thead>' +
-    '<tbody>';
-  if (!txs.length) {
-    html += '<tr><td colspan="5" class="text-center text-muted" style="padding:20px;">No transactions in this period</td></tr>';
-  } else {
-    txs.forEach(t => {
-      html += '<tr><td>' + fmtDate(t.tx_date) + '</td>' +
-        '<td><span class="badge ' + txBadge(t.tx_type) + '">' + esc(t.tx_type) + '</span></td>' +
-        '<td>' + esc(t.donor_source||'—') + '</td>' +
-        '<td class="td-right" style="color:' + (r2(t.amount)>=0?'var(--green)':'var(--red)') + ';font-weight:500;">' + fmt(t.amount) + '</td>' +
-        '<td>' + esc(t.note||'—') + '</td></tr>';
-    });
-  }
-  html += '</tbody></table></div></div></div>';
-  out.innerHTML = html;
-}
-
-// ─── USERS ────────────────────────────────────────────────────────────────────
-function renderUsersTable() {
-  const tbody = document.getElementById('users-tbody');
-  if (!allUsers.length) { tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:20px;">No users found</td></tr>'; return; }
-  tbody.innerHTML = allUsers.map(u =>
-    '<tr><td>' + esc(u.email) + '</td>' +
-    '<td><span class="badge badge-navy">' + esc(u.role) + '</span></td>' +
-    '<td class="text-muted">' + fmtDatetime(u.updated_at) + '</td>' +
-    '<td><select onchange="updateUserRole(\'' + u.id + '\',this.value)" style="width:auto;font-size:12px;">' +
-    ['admin','staff'].map(r=>'<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+r+'</option>').join('') +
-    '</select></td></tr>'
-  ).join('');
-}
-
-async function updateUserRole(userId, role) {
-  const { error } = await sb.from('user_profiles').update({ role, updated_at: new Date().toISOString() }).eq('id', userId);
-  if (error) alert('Error: ' + error.message);
-  else await loadUsers();
-}
-
-function openInviteModal() {
-  document.getElementById('invite-modal-body').innerHTML =
-    '<div class="notice notice-info" style="margin-bottom:12px;">Users must be created in the Supabase Auth dashboard first, then their profile will be created automatically on first sign-in.</div>' +
-    '<div class="form-row"><label>Step 1 — Create user in Supabase</label><p class="text-muted" style="font-size:12px;">Go to Supabase → Authentication → Users → Invite user, then enter their email.</p></div>' +
-    '<div class="form-row"><label>Step 2 — Set role here</label><p class="text-muted" style="font-size:12px;">Once they sign in for the first time, their profile will appear in the Users table. You can then set their role to <strong>admin</strong> or <strong>staff</strong>.</p></div>' +
-    '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-invite\')">Close</button></div>';
-  openModal('modal-invite');
-}
-
-// ─── ACCOUNT SETTINGS ────────────────────────────────────────────────────────
-async function showAccountSettings() {
-  const { data: factors } = await sb.auth.mfa.listFactors();
-  const hasMFA = factors?.totp?.length > 0;
-  const mfaSection =
-    '<hr class="divider">' +
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
-    '<strong style="font-size:13px;">Two-Factor Authentication</strong>' +
-    '<span class="badge ' + (hasMFA ? 'badge-green' : 'badge-red') + '">' + (hasMFA ? 'Enabled' : 'Not set up') + '</span>' +
-    '</div>' +
-    '<p class="text-muted" style="font-size:12px;margin-bottom:10px;">' + (hasMFA ? 'MFA is active. You can remove it below (not recommended).' : 'Set up an authenticator app to secure your account.') + '</p>' +
-    (hasMFA
-      ? '<button class="btn-danger btn-sm" onclick="disableMFA()">Remove MFA</button>'
-      : '<button class="btn-primary btn-sm" onclick="closeModal(\'modal-account\');showMFAEnroll()">Set Up MFA</button>') +
-    '<hr class="divider">';
-  document.getElementById('account-modal-body').innerHTML =
-    '<div style="margin-bottom:14px;">' +
-    '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Email</div>' +
-    '<div>' + esc(currentUser.email) + '</div>' +
-    '</div>' +
-    '<div style="margin-bottom:18px;">' +
-    '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Role</div>' +
-    '<div><span class="badge badge-navy">' + esc(currentProfile.role) + '</span></div>' +
-    '</div>' +
-    mfaSection +
-    '<div><strong style="font-size:13px;">Change Password</strong></div>' +
-    '<div class="form-row" style="margin-top:10px;"><label>New Password (min 6 chars)</label><input type="password" id="new-pass" placeholder="••••••••"></div>' +
-    '<div class="form-row"><label>Confirm Password</label><input type="password" id="confirm-pass" placeholder="••••••••"></div>' +
-    '<div id="pass-msg" style="margin-bottom:8px;font-size:13px;"></div>' +
-    '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-account\')">Close</button><button class="btn-primary" onclick="changePassword()">Update Password</button></div>';
-  openModal('modal-account');
-}
-
-
-async function changePassword() {
-  const p1 = document.getElementById('new-pass').value;
-  const p2 = document.getElementById('confirm-pass').value;
-  const msg = document.getElementById('pass-msg');
-  if (p1.length < 6) { msg.textContent = 'Password must be at least 6 characters.'; msg.style.color='var(--red)'; return; }
-  if (p1 !== p2) { msg.textContent = 'Passwords do not match.'; msg.style.color='var(--red)'; return; }
-  const { error } = await sb.auth.updateUser({ password: p1 });
-  if (error) { msg.textContent = error.message; msg.style.color='var(--red)'; }
-  else { msg.textContent = 'Password updated successfully.'; msg.style.color='var(--green)'; }
-}
-
-// ─── IMPORT ───────────────────────────────────────────────────────────────────
-async function importFunds() {
-  const file = document.getElementById('import-funds-file').files[0];
-  if (!file) return;
-  Papa.parse(file, { header:true, skipEmptyLines:true, complete: async (res) => {
-    const rows = res.data;
-    let ok = 0, errs = [];
-    for (const row of rows) {
-      if (!row.name) continue;
-      let poolId = null;
-      if (row.pool_name) {
-        const pool = allPools.find(p=>p.name.toLowerCase()===row.pool_name.toLowerCase());
-        if (pool) poolId = pool.id;
-      }
-      const { error } = await sb.from('funds').insert({
-        name: row.name.trim(), category: row.category||null, pool_id: poolId,
-        restrictions: row.restrictions||null, established_date: row.established_date||null,
-        balance: r2(row.opening_balance||0), status: row.status||'active', created_by: currentUser.email
-      });
-      if (error) errs.push(row.name + ': ' + error.message);
-      else ok++;
-    }
-    document.getElementById('import-funds-result').innerHTML = '<div class="notice ' + (errs.length?'notice-warn':'notice-success') + '">' + ok + ' funds imported.' + (errs.length ? ' Errors: ' + errs.join('; ') : '') + '</div>';
-    await loadData();
-  }});
-}
-
-async function importTransactions() {
-  const file = document.getElementById('import-tx-file').files[0];
-  if (!file) return;
-  Papa.parse(file, { header:true, skipEmptyLines:true, complete: async (res) => {
-    const rows = res.data;
-    let ok = 0, errs = [];
-    for (const row of rows) {
-      const fund = allFunds.find(f=>f.name.toLowerCase()===row.fund_name?.toLowerCase());
-      if (!fund) { errs.push('Fund not found: ' + row.fund_name); continue; }
-      const { error } = await sb.from('fund_transactions').insert({
-        fund_id: fund.id, tx_date: row.tx_date, tx_type: row.tx_type, amount: r2(row.amount),
-        donor_source: row.donor_source||null, note: row.note||null, created_by: currentUser.email
-      });
-      if (error) errs.push(row.fund_name + ': ' + error.message);
-      else ok++;
-    }
-    document.getElementById('import-tx-result').innerHTML = '<div class="notice ' + (errs.length?'notice-warn':'notice-success') + '">' + ok + ' transactions imported.' + (errs.length ? ' Errors: ' + errs.join('; ') : '') + '</div>';
-    await loadData();
-  }});
-}
-
-function copySetupSql() {
-  navigator.clipboard.writeText(SETUP_SQL).then(()=>alert('SQL copied to clipboard.'));
-}
-
-
-// ─── SEED PLACEHOLDER FUNDS ──────────────────────────────────────────────────
-async function seedPlaceholderFunds() {
-  const fundDefs = [
-    { name: 'Fund A', balance: 2500000 },
-    { name: 'Fund B', balance: 500000 },
-    { name: 'Fund C', balance: 3000000 },
-    { name: 'Fund D', balance: 1500000 },
-    { name: 'Fund E', balance: 1300000 },
-    { name: 'Fund F', balance: 0 },
-    { name: 'Fund G', balance: 0 },
-    { name: 'Fund H', balance: 0 },
-    { name: 'Fund I', balance: 0 },
-    { name: 'Fund J', balance: 0 },
-    { name: 'Fund K', balance: 0 },
-    { name: 'Fund L', balance: 0 }
-  ];
-  const existing = allFunds.map(f => f.name);
-  const toInsert = fundDefs.filter(f => !existing.includes(f.name)).map(f => ({
-    name: f.name,
-    category: 'Endowment',
-    status: 'active',
-    balance: f.balance,
-    restrictions: null,
-    notes: 'Placeholder — update with fund details.',
-    created_by: 'system'
-  }));
-  if (!toInsert.length) { alert('Placeholder funds already exist.'); return; }
-  const { error } = await sb.from('funds').insert(toInsert);
-  if (error) { alert('Error seeding funds: ' + error.message); return; }
-  await loadData();
-  renderFundsTable();
-  alert(toInsert.length + ' placeholder funds created.');
-}
-
-
-
-
-// ─── FUND DETAIL CHART ────────────────────────────────────────────────────────
-let fundDetailChart = null;
-let currentFundChartRange = '12m';
-
-async function setFundChartRange(range, fundId) {
-  currentFundChartRange = range;
-  document.getElementById('chart-btn-12m').classList.toggle('active', range === '12m');
-  document.getElementById('chart-btn-5y').classList.toggle('active', range === '5y');
-  document.getElementById('fund-chart-title').textContent =
-    range === '12m' ? 'Fund Balance — Last 12 Months' : 'Fund Balance — Last 5 Years';
-  renderFundDetailChart(fundId, range);
-}
-
-async function renderFundDetailChart(fundId, range) {
-  range = range || currentFundChartRange;
-  const canvas = document.getElementById('fund-detail-chart');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-
-  const isMonthly = range === '12m';
-  const txs = allTransactions.filter(t => t.fund_id === fundId);
-
-  // Fetch snapshots for this fund from DB
-  const { data: snaps } = await sb.from('fund_balance_snapshots')
-    .select('snapshot_date, balance')
-    .eq('fund_id', fundId)
-    .order('snapshot_date')
-    .limit(100000);
-
-  const snapMap = {};
-  (snaps || []).forEach(s => { snapMap[s.snapshot_date] = r2(s.balance); });
-
-  const now = new Date();
-  const labels = [], balances = [], subscriptions = [], payouts = [];
-
-  if (isMonthly) {
-    // 12 months — use transactions to build monthly running balance from snapshots
-    // Find closest snapshot before 12 months ago as starting point
-    const cutoff = new Date(now.getFullYear(), now.getMonth() - 12, 1);
-    const cutoffStr = cutoff.toISOString().slice(0,10);
-
-    // Get all snapshots up to cutoff as starting balance
-    const priorSnaps = (snaps||[]).filter(s => s.snapshot_date <= cutoffStr);
-    let startBal = priorSnaps.length ? r2(priorSnaps[priorSnaps.length-1].balance) : 0;
-
-    // Build monthly tx map
-    const txByMonth = {};
-    txs.forEach(t => {
-      const key = (t.tx_date||'').slice(0,7);
-      if (!txByMonth[key]) txByMonth[key] = { contrib:0, payout:0 };
-      if (t.tx_type === 'Subscription') txByMonth[key].contrib += r2(t.amount);
-      else if (t.tx_type === 'Redemption') txByMonth[key].payout += Math.abs(r2(t.amount));
-    });
-
-    let bal = startBal;
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-      const mo = txByMonth[key] || { contrib:0, payout:0 };
-      bal = r2(bal + mo.contrib - mo.payout);
-      const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
-      labels.push(monthName + ' ' + String(d.getFullYear()).slice(2));
-      balances.push(bal);
-      subscriptions.push(mo.contrib);
-      payouts.push(mo.payout);
-    }
-  } else {
-    // 5 years — use quarterly snapshots directly (this is the accurate historical data)
-    // Generate last 20 quarter-end dates
-    const quarterEnds = [];
-    for (let i = 19; i >= 0; i--) {
-      const d = new Date(now);
-      d.setMonth(d.getMonth() - i * 3);
-      const qMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
-      const qEnd = new Date(d.getFullYear(), qMonth + 1, 0);
-      quarterEnds.push(qEnd);
-    }
-
-    // Build quarterly tx map
-    const txByQuarter = {};
-    txs.forEach(t => {
-      if (!t.tx_date) return;
-      const d = new Date(t.tx_date + 'T00:00:00');
-      const qKey = d.getFullYear() + '-Q' + (Math.floor(d.getMonth()/3)+1);
-      if (!txByQuarter[qKey]) txByQuarter[qKey] = { contrib:0, payout:0 };
-      if (t.tx_type === 'Subscription') txByQuarter[qKey].contrib += r2(t.amount);
-      else if (t.tx_type === 'Redemption') txByQuarter[qKey].payout += Math.abs(r2(t.amount));
-    });
-
-    quarterEnds.forEach(qEnd => {
-      const dateStr = qEnd.toISOString().slice(0,10);
-      const qKey = qEnd.getFullYear() + '-Q' + (Math.floor(qEnd.getMonth()/3)+1);
-      const label = qEnd.getFullYear() + ' Q' + (Math.floor(qEnd.getMonth()/3)+1);
-
-      // Use snapshot for this quarter if available, otherwise interpolate from neighbours
-      let bal = null;
-      if (snapMap[dateStr] !== undefined) {
-        bal = snapMap[dateStr];
-      } else {
-        // Find nearest snapshots before and after
-        const allDates = Object.keys(snapMap).sort();
-        const before = allDates.filter(d => d <= dateStr).pop();
-        const after = allDates.filter(d => d > dateStr).shift();
-        if (before && after) {
-          const t1 = new Date(before).getTime(), t2 = new Date(after).getTime(), t0 = qEnd.getTime();
-          const ratio = (t0-t1)/(t2-t1);
-          bal = r2(snapMap[before] + (snapMap[after]-snapMap[before]) * ratio);
-        } else if (before) { bal = snapMap[before]; }
-        else if (after) { bal = snapMap[after]; }
-        else { bal = r2(allFunds.find(f=>f.id===fundId)?.balance||0); }
-      }
-
-      const qtx = txByQuarter[qKey] || { contrib:0, payout:0 };
-      labels.push(label);
-      balances.push(bal);
-      subscriptions.push(qtx.contrib);
-      payouts.push(qtx.payout);
-    });
-  }
-
-  if (fundDetailChart) fundDetailChart.destroy();
-  fundDetailChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Balance',
-          data: balances,
-          borderColor: '#1a2744',
-          backgroundColor: 'rgba(26,39,68,0.08)',
-          borderWidth: 2.5,
-          pointRadius: 3,
-          pointBackgroundColor: '#1a2744',
-          fill: true,
-          tension: 0.3,
-          yAxisID: 'y'
-        },
-        {
-          label: 'Subscriptions',
-          data: subscriptions,
-          borderColor: '#2d6a4f',
-          backgroundColor: 'rgba(45,106,79,0.7)',
-          borderWidth: 0,
-          type: 'bar',
-          yAxisID: 'y2'
-        },
-        {
-          label: 'Payouts',
-          data: payouts,
-          borderColor: '#8b1a1a',
-          backgroundColor: 'rgba(139,26,26,0.7)',
-          borderWidth: 0,
-          type: 'bar',
-          yAxisID: 'y2'
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10 } },
-        tooltip: {
-          callbacks: {
-            label: context => ' ' + context.dataset.label + ': ' + fmt(context.parsed.y)
-          }
-        }
-      },
-      scales: {
-        x: { ticks: { font: { size: 10 } } },
-        y: {
-          position: 'left',
-          ticks: {
-            font: { size: 10 },
-            callback: v => '$' + (Math.abs(v) >= 1000000 ? (v/1000000).toFixed(1)+'M' : Math.round(v/1000)+'k')
-          }
-        },
-        y2: {
-          position: 'right',
-          grid: { drawOnChartArea: false },
-          ticks: { font: { size: 10 }, callback: v => '$' + Math.round(v/1000)+'k' }
-        }
-      }
-    }
-  });
-}
-
-// ─── TX CHANGE REQUESTS ───────────────────────────────────────────────────────
-let allChangeRequests = [];
-let currentCRTab = 'pending';
-
-async function loadChangeRequests() {
-  const { data } = await sb.from('tx_change_requests').select('*, tx:fund_transactions(tx_date,tx_type,amount,note,fund_id,donor_source)').order('created_at', {ascending:false}).limit(100000);
-  allChangeRequests = data || [];
-  // Update badge
-  const pending = allChangeRequests.filter(r=>r.status==='pending').length;
-  const badge = document.getElementById('cr-badge');
-  if (badge) { badge.textContent = pending; badge.style.display = pending ? 'inline' : 'none'; }
-}
-
-function setCRTab(tab, btn) {
-  currentCRTab = tab;
-  document.querySelectorAll('#page-change-requests .tab-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderCRTable();
-}
-
-function renderCRTable() {
-  let reqs = allChangeRequests;
-  if (currentCRTab !== 'all') reqs = reqs.filter(r=>r.status===currentCRTab);
-  const tbody = document.getElementById('cr-tbody');
-  const isAdmin = currentProfile.role === 'admin';
-  if (!reqs.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:20px;">No requests</td></tr>'; return; }
-  tbody.innerHTML = reqs.map(r => {
-    const tx = r.tx || {};
-    const fund = allFunds.find(f=>f.id===tx.fund_id);
-    const txDesc = [fmtDate(tx.tx_date), tx.tx_type, fmt(tx.amount)].filter(Boolean).join(' · ');
-    return '<tr>' +
-      '<td><span class="badge ' + (r.request_type==='delete'?'badge-red':'badge-amber') + '">' + esc(r.request_type) + '</span></td>' +
-      '<td>' + esc(fund?.name||'—') + '</td>' +
-      '<td class="text-muted" style="font-size:12px;">' + esc(txDesc) + '</td>' +
-      '<td>' + esc(r.reason||'—') + '</td>' +
-      '<td class="text-muted">' + esc(r.requested_by||'—') + '</td>' +
-      '<td>' + fmtDatetime(r.created_at) + '</td>' +
-      '<td><span class="badge ' + redemptionBadge(r.status) + '">' + esc(r.status) + '</span></td>' +
-      '<td>' + (isAdmin && r.status==='pending' ? '<button class="btn-gold btn-sm" onclick="openReviewCR(\'' + r.id + '\')">Review</button>' : '') + '</td>' +
-      '</tr>';
-  }).join('');
-}
-
-function openEditTxModal(txId) {
-  const tx = allTransactions.find(t=>t.id===txId);
-  if (!tx) return;
-  const fund = allFunds.find(f=>f.id===tx.fund_id);
-  // Build a modal inline — reuse modal-redemption overlay with custom content
-  document.getElementById('redemption-modal-title').textContent = 'Request Transaction Edit';
-  document.getElementById('redemption-modal-body').innerHTML =
-    '<div class="notice notice-info" style="margin-bottom:14px;">Edits require approval by a second admin. The transaction will not change until approved.</div>' +
-    '<div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:12px;margin-bottom:14px;">' +
-    '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Current Transaction</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">' +
-    '<div><span class="text-muted">Fund:</span> ' + esc(fund?.name||'—') + '</div>' +
-    '<div><span class="text-muted">Date:</span> ' + fmtDate(tx.tx_date) + '</div>' +
-    '<div><span class="text-muted">Type:</span> ' + esc(tx.tx_type) + '</div>' +
-    '<div><span class="text-muted">Amount:</span> ' + fmt(tx.amount) + '</div>' +
-    '<div style="grid-column:1/-1;"><span class="text-muted">Note:</span> ' + esc(tx.note||'—') + '</div>' +
-    '</div></div>' +
-    '<div class="form-grid">' +
-    '<div class="form-row"><label>New Date</label><input type="date" id="edit-date" value="' + esc(tx.tx_date||'') + '"></div>' +
-    '<div class="form-row"><label>New Amount (CAD)</label><input type="number" step="0.01" id="edit-amount" value="' + r2(tx.amount) + '"></div>' +
-    '<div class="form-row"><label>New Type</label><select id="edit-type">' +
-    ['Subscription','Redemption','Return Allocation','Return Correction'].map(t=>'<option value="'+t+'"'+(tx.tx_type===t?' selected':'')+'>'+t+'</option>').join('') +
-    '</select></div>' +
-    '<div class="form-row"><label>New Donor / Source</label><input id="edit-donor" value="' + esc(tx.donor_source||'') + '"></div>' +
-    '<div class="form-row full"><label>New Note</label><input id="edit-note" value="' + esc(tx.note||'') + '"></div>' +
-    '<div class="form-row full"><label>Reason for Edit *</label><textarea id="edit-reason" style="min-height:50px;" placeholder="Explain why this transaction needs to be changed"></textarea></div>' +
-    '</div>' +
-    '<div class="form-actions">' +
-    '<button class="btn-secondary" onclick="closeModal(\'modal-redemption\')">Cancel</button>' +
-    '<button class="btn-primary" onclick="submitEditRequest(\'' + txId + '\')">Submit Edit Request</button>' +
-    '</div>';
-  openModal('modal-redemption');
-}
-
-async function submitEditRequest(txId) {
-  const tx = allTransactions.find(t=>t.id===txId);
-  if (!tx) return;
-  const reason = document.getElementById('edit-reason').value.trim();
-  if (!reason) return alert('Please provide a reason for the edit.');
-  const proposed = {
-    tx_date: document.getElementById('edit-date').value,
-    amount: r2(document.getElementById('edit-amount').value),
-    tx_type: document.getElementById('edit-type').value,
-    donor_source: document.getElementById('edit-donor').value.trim(),
-    note: document.getElementById('edit-note').value.trim()
-  };
-  const { error } = await sb.from('tx_change_requests').insert({
-    request_type: 'edit', tx_id: txId,
-    current_data: { tx_date:tx.tx_date, amount:r2(tx.amount), tx_type:tx.tx_type, donor_source:tx.donor_source, note:tx.note },
-    proposed_data: proposed, reason, requested_by: currentUser.email, status: 'pending'
-  });
-  if (error) { alert('Error: ' + error.message); return; }
-  closeModal('modal-redemption');
-  alert('Edit request submitted. A second admin will review it.');
-  await loadChangeRequests();
-}
-
-function openDeleteTxModal(txId) {
-  const tx = allTransactions.find(t=>t.id===txId);
-  if (!tx) return;
-  const fund = allFunds.find(f=>f.id===tx.fund_id);
-  document.getElementById('redemption-modal-title').textContent = 'Request Transaction Deletion';
-  document.getElementById('redemption-modal-body').innerHTML =
-    '<div class="notice notice-warn" style="margin-bottom:14px;">Deletion requires approval by a second admin. The transaction will not be removed until approved.</div>' +
-    '<div style="background:var(--red-pale);border:1px solid #f5b7b7;border-radius:var(--radius);padding:12px;margin-bottom:14px;">' +
-    '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;color:var(--red);">Transaction to Delete</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">' +
-    '<div><span class="text-muted">Fund:</span> ' + esc(fund?.name||'—') + '</div>' +
-    '<div><span class="text-muted">Date:</span> ' + fmtDate(tx.tx_date) + '</div>' +
-    '<div><span class="text-muted">Type:</span> ' + esc(tx.tx_type) + '</div>' +
-    '<div><span class="text-muted">Amount:</span> <strong>' + fmt(tx.amount) + '</strong></div>' +
-    '<div style="grid-column:1/-1;"><span class="text-muted">Note:</span> ' + esc(tx.note||'—') + '</div>' +
-    '</div></div>' +
-    '<div class="form-row"><label>Reason for Deletion *</label><textarea id="delete-reason" style="min-height:60px;" placeholder="Explain why this transaction should be deleted"></textarea></div>' +
-    '<div class="form-actions">' +
-    '<button class="btn-secondary" onclick="closeModal(\'modal-redemption\')">Cancel</button>' +
-    '<button class="btn-danger" onclick="submitDeleteRequest(\'' + txId + '\')">Submit Deletion Request</button>' +
-    '</div>';
-  openModal('modal-redemption');
-}
-
-async function submitDeleteRequest(txId) {
-  const tx = allTransactions.find(t=>t.id===txId);
-  if (!tx) return;
-  const reason = document.getElementById('delete-reason').value.trim();
-  if (!reason) return alert('Please provide a reason for the deletion.');
-  const { error } = await sb.from('tx_change_requests').insert({
-    request_type: 'delete', tx_id: txId,
-    current_data: { tx_date:tx.tx_date, amount:r2(tx.amount), tx_type:tx.tx_type, donor_source:tx.donor_source, note:tx.note, fund_id:tx.fund_id },
-    proposed_data: null, reason, requested_by: currentUser.email, status: 'pending'
-  });
-  if (error) { alert('Error: ' + error.message); return; }
-  closeModal('modal-redemption');
-  alert('Deletion request submitted. A second admin will review it.');
-  await loadChangeRequests();
-}
-
-function openReviewCR(id) {
-  const req = allChangeRequests.find(r=>r.id===id);
-  if (!req) return;
-  const tx = req.tx || {};
-  const fund = allFunds.find(f=>f.id===tx.fund_id);
-  const isDelete = req.request_type === 'delete';
-  const p = req.proposed_data || {};
-
-  let diffHtml = '';
-  if (!isDelete) {
-    // Show side-by-side diff
-    const fields = [
-      ['Date', fmtDate(req.current_data?.tx_date), fmtDate(p.tx_date)],
-      ['Amount', fmt(req.current_data?.amount), fmt(p.amount)],
-      ['Type', req.current_data?.tx_type, p.tx_type],
-      ['Donor / Source', req.current_data?.donor_source||'—', p.donor_source||'—'],
-      ['Note', req.current_data?.note||'—', p.note||'—']
-    ];
-    diffHtml = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;margin-bottom:16px;">' +
-      '<div style="font-weight:700;color:var(--gray-400);text-transform:uppercase;font-size:10px;letter-spacing:.05em;">Field</div>' +
-      '<div style="font-weight:700;color:var(--gray-400);text-transform:uppercase;font-size:10px;letter-spacing:.05em;">Current</div>' +
-      '<div style="font-weight:700;color:var(--navy);text-transform:uppercase;font-size:10px;letter-spacing:.05em;">Proposed</div>' +
-      fields.map(([label, cur, prop]) => {
-        const changed = cur !== prop;
-        return '<div style="padding:6px 0;border-top:1px solid var(--gray-100);font-weight:500;">' + esc(label) + '</div>' +
-          '<div style="padding:6px 0;border-top:1px solid var(--gray-100);' + (changed?'color:var(--gray-400);text-decoration:line-through;':'') + '">' + esc(cur) + '</div>' +
-          '<div style="padding:6px 0;border-top:1px solid var(--gray-100);' + (changed?'color:var(--green);font-weight:600;':'') + '">' + esc(prop) + '</div>';
-      }).join('') + '</div>';
-  } else {
-    diffHtml = '<div class="notice notice-error" style="margin-bottom:14px;">This will permanently delete the transaction: <strong>' + fmtDate(tx.tx_date) + ' · ' + esc(tx.tx_type) + ' · ' + fmt(tx.amount) + '</strong> from fund <strong>' + esc(fund?.name||'—') + '</strong>. The fund balance will be adjusted automatically.</div>';
-  }
-
-  document.getElementById('cr-modal-title').textContent = (isDelete ? 'Review Deletion Request' : 'Review Edit Request');
-  document.getElementById('cr-modal-body').innerHTML =
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">' +
-    '<div><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Fund</div><div style="font-weight:500;">' + esc(fund?.name||'—') + '</div></div>' +
-    '<div><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Requested By</div><div>' + esc(req.requested_by) + '</div></div>' +
-    '<div style="grid-column:1/-1;"><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Reason</div><div>' + esc(req.reason||'—') + '</div></div>' +
-    '</div>' +
-    diffHtml +
-    (req.requested_by === currentUser.email ? '<div class="notice notice-warn" style="margin-bottom:12px;">You submitted this request. A different admin must approve it.</div>' : '') +
-    '<div class="form-row"><label>Review Note (optional)</label><textarea id="cr-review-note" style="min-height:50px;"></textarea></div>' +
-    '<div class="form-actions">' +
-    (req.requested_by !== currentUser.email ?
-      '<button class="btn-primary btn-sm" onclick="processCRDecision(\'' + id + '\',true)" style="background:var(--green);">&#10003; Approve</button>' +
-      '<button class="btn-danger btn-sm" onclick="processCRDecision(\'' + id + '\',false)">&#10005; Reject</button>' : '') +
-    '<button class="btn-secondary btn-sm" onclick="closeModal(\'modal-review-cr\')">Cancel</button>' +
-    '</div>';
-  openModal('modal-review-cr');
-}
-
-async function processCRDecision(id, approved) {
-  const req = allChangeRequests.find(r=>r.id===id);
-  if (!req) return;
-  const note = document.getElementById('cr-review-note').value.trim();
-  const status = approved ? 'approved' : 'rejected';
-
-  // Update request status
-  const { error: updErr } = await sb.from('tx_change_requests').update({
-    status, reviewed_by: currentUser.email, reviewed_at: new Date().toISOString(), review_note: note
-  }).eq('id', id);
-  if (updErr) { alert('Error: ' + updErr.message); return; }
-
-  if (approved) {
-    const tx = allTransactions.find(t=>t.id===req.tx_id);
-    const fund = tx ? allFunds.find(f=>f.id===tx.fund_id) : null;
-
-    if (req.request_type === 'delete') {
-      // First reverse the fund balance, then delete transaction (cascade removes change requests)
-      if (fund && tx) {
-        const newBal = r2(r2(fund.balance) - r2(tx.amount));
-        await sb.from('funds').update({ balance: newBal }).eq('id', fund.id);
-      }
-      // Delete change requests referencing this tx first, then the transaction
-      await sb.from('tx_change_requests').delete().eq('tx_id', req.tx_id);
-      const { error: delErr } = await sb.from('fund_transactions').delete().eq('id', req.tx_id);
-      if (delErr) { alert('Delete error: ' + delErr.message); return; }
-    } else if (req.request_type === 'edit') {
-      const p = req.proposed_data;
-      // Apply the balance difference
-      if (fund && tx && r2(p.amount) !== r2(tx.amount)) {
-        const diff = r2(p.amount) - r2(tx.amount);
-        await sb.from('funds').update({ balance: r2(r2(fund.balance) + diff) }).eq('id', fund.id);
-      }
-      const { error: editErr } = await sb.from('fund_transactions').update({
-        tx_date: p.tx_date, amount: r2(p.amount), tx_type: p.tx_type,
-        donor_source: p.donor_source, note: p.note
-      }).eq('id', req.tx_id);
-      if (editErr) { alert('Edit error: ' + editErr.message); return; }
-    }
-  }
-
-  closeModal('modal-review-cr');
-  await loadData();
-  await loadChangeRequests();
-  renderCRTable();
-  renderDashboard();
-  alert(approved ? 'Request approved and applied.' : 'Request rejected.');
-}
-
-// ─── PAYOUT CALCULATOR ───────────────────────────────────────────────────────
-let allSnapshots = [];
-const DEFAULT_RATE = 4.25;
-
-async function loadSnapshots() {
-  const { data } = await sb.from('fund_balance_snapshots').select('*').order('snapshot_date').limit(100000);
-  allSnapshots = data || [];
-}
-
-function getAvgBalance(fundId, numQtrs) {
-  numQtrs = parseInt(numQtrs) || 12;
-  const snaps = allSnapshots.filter(s=>s.fund_id===fundId).sort((a,b)=>b.snapshot_date>a.snapshot_date?-1:1).reverse();
-  const last = snaps.slice(-numQtrs);
-  if (!last.length) return null;
-  return r2(last.reduce((s,sn)=>s+r2(sn.balance),0)/last.length);
-}
-
-function getFundAnnualPayout(fund, rateOverride, qtrsOverride) {
-  if (fund.payout_fixed && r2(fund.payout_fixed)>0) {
-    return { annual:r2(fund.payout_fixed), rule:'Fixed ' + fmt(fund.payout_fixed) + '/yr', avg:null, qtrs:0 };
-  }
-  const rate = rateOverride !== undefined ? parseFloat(rateOverride) : (fund.payout_rate ? parseFloat(fund.payout_rate) : DEFAULT_RATE);
-  const qtrs = qtrsOverride || 12;
-  const avg = getAvgBalance(fund.id, qtrs);
-  if (avg === null) {
-    const annual = r2(r2(fund.balance)*rate/100);
-    return { annual, rule:rate+'% (current bal)', avg:r2(fund.balance), qtrs:0, fallback:true };
-  }
-  return { annual:r2(avg*rate/100), rule:rate+'% of '+qtrs+'-qtr avg', avg, qtrs };
-}
-
-function runCalculator() {
-  const fundId = document.getElementById('calc-fund')?.value;
-  const rate = parseFloat(document.getElementById('calc-rate')?.value||4.25);
-  const qtrs = parseInt(document.getElementById('calc-quarters')?.value||12);
-  const result = document.getElementById('calc-result');
-  if (!result) return;
-  if (!fundId) { result.innerHTML=''; return; }
-  const fund = allFunds.find(f=>f.id===fundId);
-  if (!fund) return;
-  const p = getFundAnnualPayout(fund, rate, qtrs);
-  const avgBal = p.avg !== null ? p.avg : r2(fund.balance);
-  // Show which quarters were used
-  const snaps = allSnapshots.filter(s=>s.fund_id===fundId).sort((a,b)=>a.snapshot_date>b.snapshot_date?1:-1);
-  const usedSnaps = snaps.slice(-qtrs);
-  const dateRange = usedSnaps.length>=2
-    ? fmtDate(usedSnaps[0].snapshot_date) + ' — ' + fmtDate(usedSnaps[usedSnaps.length-1].snapshot_date)
-    : 'Insufficient snapshot history';
-
-  result.innerHTML =
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:8px;">' +
-    '<div class="metric-card"><div class="metric-label">Average Balance</div><div class="metric-value" style="font-size:18px;">' + fmt(avgBal) + '</div><div class="metric-sub">' + (usedSnaps.length||'0') + ' quarters used</div></div>' +
-    '<div class="metric-card gold"><div class="metric-label">Annual Redemption</div><div class="metric-value" style="font-size:18px;">' + fmt(p.annual) + '</div><div class="metric-sub">' + rate + '% rate</div></div>' +
-    '<div class="metric-card green"><div class="metric-label">Quarterly Redemption</div><div class="metric-value" style="font-size:18px;">' + fmt(r2(p.annual/4)) + '</div></div>' +
-    '<div class="metric-card"><div class="metric-label">Monthly Redemption</div><div class="metric-value" style="font-size:18px;">' + fmt(r2(p.annual/12)) + '</div></div>' +
-    '</div>' +
-    '<div class="notice notice-info" style="margin-top:10px;font-size:12px;"><strong>Date range used:</strong> ' + dateRange + '</div>' +
-    (currentProfile.role==='admin' ?
-      '<div style="margin-top:10px;display:flex;gap:8px;">' +
-      '<button class="btn-gold" onclick="postCalculatedRedemption(\''+fundId+'\','+r2(p.annual/4)+',\'quarterly\')">Post as Quarterly Redemption</button>' +
-      '<button class="btn-secondary" onclick="postCalculatedRedemption(\''+fundId+'\','+r2(p.annual/12)+',\'monthly\')">Post as Monthly Redemption</button>' +
-      '</div>' : '');
-}
-
-async function postCalculatedRedemption(fundId, amount, freq) {
-  const fund = allFunds.find(f=>f.id===fundId);
-  if (!fund) return;
-  if (!confirm('Post a ' + freq + ' redemption of ' + fmt(amount) + ' from ' + fund.name + '?')) return;
-  const { error: txErr } = await sb.from('fund_transactions').insert({
-    fund_id: fundId, tx_date: new Date().toISOString().slice(0,10),
-    tx_type: 'Redemption', amount: -r2(amount),
-    note: freq.charAt(0).toUpperCase()+freq.slice(1)+' redemption — spending policy',
-    created_by: currentUser.email
-  });
-  if (txErr) { alert('Error: ' + txErr.message); return; }
-  await sb.from('funds').update({ balance: r2(r2(fund.balance)-r2(amount)) }).eq('id', fundId);
-  await loadData();
-  alert('Redemption posted to ' + fund.name + '.');
-  runCalculator();
-}
-
-async function renderCalculatorPage() {
-  await loadSnapshots();
-  // Populate fund selector
-  const sel = document.getElementById('calc-fund');
-  if (sel && sel.options.length <= 1) {
-    allFunds.filter(f=>f.status==='active').forEach(f => {
-      const o = document.createElement('option');
-      o.value = f.id; o.textContent = f.name;
-      sel.appendChild(o);
-    });
-  }
-  // Summary table
-  const rate = parseFloat(document.getElementById('summary-rate')?.value||4.25);
-  const qtrs = parseInt(document.getElementById('summary-quarters')?.value||12);
-  const activeFunds = allFunds.filter(f=>f.status==='active');
-  const isAdmin = currentProfile.role==='admin';
-  let totalAnnual = 0;
-  const snapCount = allSnapshots.length;
-  const notice = document.getElementById('sp-history-notice');
-  if (notice) {
-    if (!snapCount) {
-      notice.style.display='';
-      notice.innerHTML='<strong>No quarterly snapshots yet.</strong> Run the backfill from Setup & Backups to seed historical data.';
-    } else { notice.style.display='none'; }
-  }
-  const rows = activeFunds.map(fund => {
-    const p = getFundAnnualPayout(fund, rate, qtrs);
-    totalAnnual = r2(totalAnnual + p.annual);
-    const isCustom = fund.payout_fixed || fund.payout_rate;
-    return '<tr>' +
-      '<td style="font-weight:500;">' + esc(fund.name) + '</td>' +
-      '<td class="td-right">' + fmt(fund.balance) + '</td>' +
-      '<td class="td-right">' + (p.avg!==null?fmt(p.avg):'<span class="text-muted">—</span>') + '</td>' +
-      '<td class="td-right">' + (p.qtrs||'—') + '</td>' +
-      '<td>' + (isCustom?'<span class="badge badge-amber">Custom</span> ':'') + esc(p.rule) + '</td>' +
-      '<td class="td-right" style="font-weight:600;color:var(--navy);">' + fmt(p.annual) + '</td>' +
-      '<td class="td-right">' + fmt(r2(p.annual/4)) + '</td>' +
-      '<td class="td-right">' + fmt(r2(p.annual/12)) + '</td>' +
-      (isAdmin ? '<td><button class="btn-ghost btn-sm" onclick="openFundModal(\''+fund.id+'\')">Edit Rule</button></td>' : '<td></td>') +
-      '</tr>';
-  });
-  document.getElementById('spending-tbody').innerHTML = rows.join('') || '<tr><td colspan="9" class="text-center text-muted" style="padding:20px;">No active funds</td></tr>';
-  const annualEl = document.getElementById('sp-total-annual');
-  const qtrEl = document.getElementById('sp-total-quarterly');
-  if (annualEl) annualEl.textContent = fmt(totalAnnual);
-  if (qtrEl) qtrEl.textContent = fmt(r2(totalAnnual/4));
-}
-
-// Backfill 16 quarters of synthetic history ($95M total, 6%/yr growth, equal split across active funds)
-async function backfillTestHistory() {
-  const activeFunds = allFunds.filter(f => f.status === 'active');
-  if (!activeFunds.length) { alert('No active funds to backfill. Create funds first.'); return; }
-  const n = activeFunds.length;
-  const startingTotal = 95000000;
-  const annualGrowth = 0.06;
-  const inserts = [];
-  // Generate 16 quarters going back from today
-  const today = new Date();
-  for (let q = 15; q >= 0; q--) {
-    const d = new Date(today);
-    d.setMonth(d.getMonth() - q * 3);
-    // Snap to quarter-end: Mar 31, Jun 30, Sep 30, Dec 31
-    const qMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
-    const qEnd = new Date(d.getFullYear(), qMonth + 1, 0);
-    const snapDate = qEnd.toISOString().slice(0, 10);
-    // Years ago from today
-    const yearsAgo = q * 3 / 12;
-    const yearsFromStart = 4 - yearsAgo;
-    const totalAtTime = r2(startingTotal * Math.pow(1 + annualGrowth, yearsFromStart < 0 ? 0 : yearsFromStart));
-    const perFund = r2(totalAtTime / n);
-    for (const fund of activeFunds) {
-      inserts.push({ fund_id: fund.id, snapshot_date: snapDate, balance: perFund, created_by: 'system-backfill' });
-    }
-  }
-  const { error } = await sb.from('fund_balance_snapshots').upsert(inserts, { onConflict: 'fund_id,snapshot_date', ignoreDuplicates: true });
-  if (error) { alert('Backfill error: ' + error.message); return; }
-  // Also update fund balances to current value
-  const currentTotal = r2(startingTotal * Math.pow(1.06, 4));
-  const currentPerFund = r2(currentTotal / n);
-  for (const fund of activeFunds) {
-    await sb.from('funds').update({ balance: currentPerFund }).eq('id', fund.id);
-  }
-  await loadData();
-  alert('Backfill complete! 16 quarters of history seeded. Total invested value: ' + fmt(currentTotal) + ' across ' + n + ' funds.');
-  renderCalculatorPage();
-}
-
-// ─── MODAL HELPERS ────────────────────────────────────────────────────────────
-function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-document.querySelectorAll('.modal-overlay').forEach(o => {
-  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
-});
-
-// ─── CREST ────────────────────────────────────────────────────────────────────
-function setCrestImages() {
-  const srcEl = document.getElementById('crest-src');
-  if (!srcEl) return;
-  const apply = () => {
-    const src = srcEl.src;
-    if (!src || src === location.href) return;
-    ['auth-crest','sidebar-crest'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) { el.src = src; el.style.display = 'block'; }
-    });
-  };
-  if (srcEl.complete) { apply(); }
-  else { srcEl.onload = apply; }
-}
-</script>
-</body>
-</html>async function renderPoolsGrid() {
+async function renderPoolsGrid() {
   const grid = document.getElementById('pools-grid');
   if (!allPools.length) {
     grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">&#9650;</div><p>No investment pools yet.</p></div>';
@@ -2596,3 +1570,619 @@ function renderReturnsTable(returns) {
   });
 }
 
+
+// ─── INVESTMENT POOLS - POST RETURN ──────────────────────────────────────────
+function openPostReturnModal() {
+  var poolOptions = allPools.filter(function(p){return p.status==='active';}).map(function(p) {
+    var totalAlloc = allFunds.filter(function(f){return f.pool_id===p.id;}).reduce(function(s,f){return s+r2(f.balance);},0);
+    return '<option value="' + p.id + '">' + esc(p.name) + ' (' + fmt(totalAlloc) + ' allocated)</option>';
+  }).join('');
+  document.getElementById('pool-modal-title').textContent = 'Post Monthly Return';
+  var h = '<div class="notice notice-info" style="margin-bottom:14px;">Enter the gain or loss for this pool. It will be distributed pro-rata to all funds in the pool.</div>';
+  h += '<div class="form-grid">';
+  h += '<div class="form-row"><label>Return Date *</label><input type="date" id="pr-date" value="' + new Date().toISOString().slice(0,10) + '"></div>';
+  h += '<div class="form-row"><label>Pool *</label><select id="pr-pool" onchange="updateReturnPreview()">' + poolOptions + '</select></div>';
+  h += '<div class="form-row"><label>Gain / Loss Amount (CAD) *</label><input type="number" step="0.01" id="pr-amount" placeholder="Enter negative for a loss" oninput="updateReturnPreview()"></div>';
+  h += '<div class="form-row"><label>Note</label><input id="pr-note" placeholder="e.g. April 2026 statement"></div>';
+  h += '</div><div id="pr-preview" style="margin-top:12px;"></div>';
+  h += '<div class="form-actions">';
+  h += '<button class="btn-secondary" onclick="closeModal(\'modal-pool\')">Cancel</button>';
+  h += '<button class="btn-gold" onclick="postMonthlyReturn()">Post Return</button>';
+  h += '</div>';
+  document.getElementById('pool-modal-body').innerHTML = h;
+  updateReturnPreview();
+  openModal('modal-pool');
+}
+
+function updateReturnPreview() {
+  var poolId = document.getElementById('pr-pool') ? document.getElementById('pr-pool').value : '';
+  var gross = r2(document.getElementById('pr-amount') ? document.getElementById('pr-amount').value : 0);
+  var preview = document.getElementById('pr-preview');
+  if (!preview || !poolId || !gross) { if(preview) preview.innerHTML=''; return; }
+  var poolFunds = allFunds.filter(function(f){return f.pool_id===poolId&&f.status==='active';});
+  var totalBal = poolFunds.reduce(function(s,f){return s+r2(f.balance);},0);
+  if (!poolFunds.length || !totalBal) { preview.innerHTML = '<div class="notice notice-warn">No active funds in this pool.</div>'; return; }
+  var rows = poolFunds.map(function(f) {
+    var share = r2(f.balance)/totalBal;
+    var alloc = r2(gross*share);
+    var color = alloc>=0 ? 'var(--green)' : 'var(--red)';
+    return '<tr><td>' + esc(f.name) + '</td><td class="td-right">' + fmt(f.balance) + '</td><td class="td-right">' + (share*100).toFixed(1) + '%</td><td class="td-right" style="font-weight:600;color:' + color + ';">' + fmt(alloc) + '</td></tr>';
+  }).join('');
+  preview.innerHTML = '<div style="font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Allocation Preview</div><div class="table-wrap"><table><thead><tr><th>Fund</th><th class="td-right">Balance</th><th class="td-right">Share</th><th class="td-right">Allocation</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+async function postMonthlyReturn() {
+  var poolId = document.getElementById('pr-pool').value;
+  var date = document.getElementById('pr-date').value;
+  var gross = r2(document.getElementById('pr-amount').value);
+  var note = document.getElementById('pr-note').value.trim();
+  if (!poolId || !date || gross === 0) return alert('Pool, date and amount are required.');
+  var poolFunds = allFunds.filter(function(f){return f.pool_id===poolId&&f.status==='active';});
+  var totalBal = poolFunds.reduce(function(s,f){return s+r2(f.balance);},0);
+  if (!poolFunds.length) return alert('No active funds in this pool.');
+  var retRes = await sb.from('pool_returns').upsert({ pool_id:poolId, return_date:date, gross_return:gross, note:note, created_by:currentUser.email }, { onConflict:'pool_id,return_date' }).select().single();
+  if (retRes.error) { alert('Error: ' + retRes.error.message); return; }
+  var txInserts = [], allocInserts = [];
+  poolFunds.forEach(function(f) {
+    var share = totalBal > 0 ? r2(f.balance)/totalBal : 0;
+    var alloc = r2(gross * share);
+    if (alloc === 0) return;
+    txInserts.push({ fund_id:f.id, tx_date:date, tx_type:'Return Allocation', amount:alloc, note:(note||'Pool return') + ' (' + (gross>=0?'Gain':'Loss') + ')', created_by:currentUser.email });
+    allocInserts.push({ pool_return_id:retRes.data.id, fund_id:f.id, allocated_amount:alloc, fund_balance_at_time:r2(f.balance) });
+  });
+  if (txInserts.length) {
+    var txRes = await sb.from('fund_transactions').insert(txInserts);
+    if (txRes.error) { alert('Transaction error: ' + txRes.error.message); return; }
+    if (allocInserts.length) await sb.from('return_allocations').insert(allocInserts);
+    for (var i=0; i<txInserts.length; i++) {
+      var fund = allFunds.find(function(f){return f.id===txInserts[i].fund_id;});
+      await sb.from('funds').update({ balance: r2((fund?fund.balance:0)+txInserts[i].amount) }).eq('id', txInserts[i].fund_id);
+    }
+    await snapshotAllFundBalances(date);
+  }
+  closeModal('modal-pool');
+  await loadData();
+  renderPoolsGrid();
+  renderDashboard();
+  alert('Return posted and allocated to ' + txInserts.length + ' funds.');
+}
+
+async function deletePoolReturn(returnId, poolId) {
+  if (!confirm('Delete this return entry? Fund balances will NOT be reversed automatically.')) return;
+  await sb.from('pool_returns').delete().eq('id', returnId);
+  await loadData();
+  renderPoolsGrid();
+}
+
+// ─── POOL MODAL ───────────────────────────────────────────────────────────────
+function openPoolModal(id) {
+  var editingPoolId = id || null;
+  var pool = id ? allPools.find(function(p){return p.id===id;}) : null;
+  document.getElementById('pool-modal-title').textContent = id ? 'Edit Pool' : 'New Investment Pool';
+  var h = '<div class="form-grid">';
+  h += '<div class="form-row full"><label>Pool Name *</label><input id="po-name" value="' + esc(pool?pool.name:'') + '" placeholder="e.g. Endowment"></div>';
+  h += '<div class="form-row"><label>Manager</label><input id="po-manager" value="' + esc(pool&&pool.manager?pool.manager:'') + '"></div>';
+  h += '<div class="form-row"><label>Status</label><select id="po-status"><option value="active"' + ((!pool||pool.status==='active')?' selected':'') + '>Active</option><option value="closed"' + (pool&&pool.status==='closed'?' selected':'') + '>Closed</option></select></div>';
+  h += '<div class="form-row full"><label>Description</label><textarea id="po-desc">' + esc(pool?pool.description||'':'') + '</textarea></div>';
+  h += '</div>';
+  h += '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-pool\')">Cancel</button><button class="btn-primary" onclick="savePool(\'' + (id||'') + '\')">Save Pool</button></div>';
+  document.getElementById('pool-modal-body').innerHTML = h;
+  openModal('modal-pool');
+}
+
+async function savePool(editingPoolId) {
+  var name = document.getElementById('po-name').value.trim();
+  if (!name) return alert('Pool name is required.');
+  var data = { name:name, manager:document.getElementById('po-manager').value.trim(), status:document.getElementById('po-status').value, description:document.getElementById('po-desc').value.trim(), created_by:currentUser.email };
+  var res;
+  if (editingPoolId) { res = await sb.from('investment_pools').update(data).eq('id', editingPoolId); }
+  else { res = await sb.from('investment_pools').insert(data); }
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  closeModal('modal-pool');
+  await loadData();
+  renderPoolsGrid();
+}
+
+// ─── PAYOUT CALCULATOR ────────────────────────────────────────────────────────
+var allSnapshots = [];
+var DEFAULT_RATE = 4.25;
+
+async function loadSnapshots() {
+  var res = await sb.from('fund_balance_snapshots').select('*').order('snapshot_date').limit(100000);
+  allSnapshots = res.data || [];
+}
+
+function getAvgBalance(fundId, numQtrs) {
+  numQtrs = parseInt(numQtrs) || 12;
+  var snaps = allSnapshots.filter(function(s){return s.fund_id===fundId;}).sort(function(a,b){return a.snapshot_date>b.snapshot_date?1:-1;});
+  var last = snaps.slice(-numQtrs);
+  if (!last.length) return null;
+  return r2(last.reduce(function(s,sn){return s+r2(sn.balance);},0)/last.length);
+}
+
+function getFundAnnualPayout(fund, rateOverride, qtrsOverride) {
+  if (fund.payout_fixed && r2(fund.payout_fixed)>0) {
+    return { annual:r2(fund.payout_fixed), rule:'Fixed ' + fmt(fund.payout_fixed) + '/yr', avg:null, qtrs:0 };
+  }
+  var rate = rateOverride !== undefined ? parseFloat(rateOverride) : (fund.payout_rate ? parseFloat(fund.payout_rate) : DEFAULT_RATE);
+  var qtrs = qtrsOverride || 12;
+  var avg = getAvgBalance(fund.id, qtrs);
+  if (avg === null) { return { annual:r2(r2(fund.balance)*rate/100), rule:rate+'% (current bal)', avg:r2(fund.balance), qtrs:0, fallback:true }; }
+  return { annual:r2(avg*rate/100), rule:rate+'% of '+qtrs+'-qtr avg', avg:avg, qtrs:qtrs };
+}
+
+function runCalculator() {
+  var fundId = document.getElementById('calc-fund') ? document.getElementById('calc-fund').value : '';
+  var rate = parseFloat(document.getElementById('calc-rate') ? document.getElementById('calc-rate').value : 4.25);
+  var qtrs = parseInt(document.getElementById('calc-quarters') ? document.getElementById('calc-quarters').value : 12);
+  var result = document.getElementById('calc-result');
+  if (!result || !fundId) { if(result) result.innerHTML=''; return; }
+  var fund = allFunds.find(function(f){return f.id===fundId;});
+  if (!fund) return;
+  var p = getFundAnnualPayout(fund, rate, qtrs);
+  var avgBal = p.avg !== null ? p.avg : r2(fund.balance);
+  var snaps = allSnapshots.filter(function(s){return s.fund_id===fundId;}).sort(function(a,b){return a.snapshot_date>b.snapshot_date?1:-1;});
+  var usedSnaps = snaps.slice(-qtrs);
+  var dateRange = usedSnaps.length>=2 ? fmtDate(usedSnaps[usedSnaps.length-1].snapshot_date) + ' to ' + fmtDate(usedSnaps[0].snapshot_date) : 'Insufficient history';
+  var h = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:8px;">';
+  h += '<div class="metric-card"><div class="metric-label">Average Balance</div><div class="metric-value" style="font-size:18px;">' + fmt(avgBal) + '</div><div class="metric-sub">' + (usedSnaps.length||0) + ' quarters</div></div>';
+  h += '<div class="metric-card gold"><div class="metric-label">Annual Redemption</div><div class="metric-value" style="font-size:18px;">' + fmt(p.annual) + '</div></div>';
+  h += '<div class="metric-card green"><div class="metric-label">Quarterly</div><div class="metric-value" style="font-size:18px;">' + fmt(r2(p.annual/4)) + '</div></div>';
+  h += '<div class="metric-card"><div class="metric-label">Monthly</div><div class="metric-value" style="font-size:18px;">' + fmt(r2(p.annual/12)) + '</div></div>';
+  h += '</div><div class="notice notice-info" style="margin-top:10px;font-size:12px;"><strong>Date range:</strong> ' + dateRange + '</div>';
+  if (currentProfile.role==='admin') {
+    h += '<div style="margin-top:10px;display:flex;gap:8px;">';
+    h += '<button class="btn-gold" onclick="postCalculatedRedemption(\'' + fundId + '\',' + r2(p.annual/4) + ',\'quarterly\')">Post as Quarterly Redemption</button>';
+    h += '<button class="btn-secondary" onclick="postCalculatedRedemption(\'' + fundId + '\',' + r2(p.annual/12) + ',\'monthly\')">Post as Monthly Redemption</button>';
+    h += '</div>';
+  }
+  result.innerHTML = h;
+}
+
+async function postCalculatedRedemption(fundId, amount, freq) {
+  var fund = allFunds.find(function(f){return f.id===fundId;});
+  if (!fund) return;
+  if (!confirm('Post a ' + freq + ' redemption of ' + fmt(amount) + ' from ' + fund.name + '?')) return;
+  var res = await sb.from('fund_transactions').insert({ fund_id:fundId, tx_date:new Date().toISOString().slice(0,10), tx_type:'Redemption', amount:-r2(amount), note:freq.charAt(0).toUpperCase()+freq.slice(1)+' redemption - spending policy', created_by:currentUser.email });
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  await sb.from('funds').update({ balance: r2(r2(fund.balance)-r2(amount)) }).eq('id', fundId);
+  await loadData();
+  alert('Redemption posted to ' + fund.name + '.');
+  runCalculator();
+}
+
+async function renderCalculatorPage() {
+  await loadSnapshots();
+  var sel = document.getElementById('calc-fund');
+  if (sel) {
+    sel.innerHTML = '<option value="">— Select fund —</option>';
+    allFunds.filter(function(f){return f.status==='active';}).forEach(function(f) {
+      var o = document.createElement('option');
+      o.value = f.id; o.textContent = f.name; sel.appendChild(o);
+    });
+  }
+  var rate = parseFloat(document.getElementById('summary-rate') ? document.getElementById('summary-rate').value : 4.25);
+  var qtrs = parseInt(document.getElementById('summary-quarters') ? document.getElementById('summary-quarters').value : 12);
+  var activeFunds = allFunds.filter(function(f){return f.status==='active';});
+  var isAdmin = currentProfile.role==='admin';
+  var totalAnnual = 0;
+  var notice = document.getElementById('sp-history-notice');
+  if (notice) { notice.style.display = allSnapshots.length ? 'none' : ''; if(!allSnapshots.length) notice.innerHTML='<strong>No snapshots yet.</strong> Run backfill from Setup & Backups.'; }
+  var rows = activeFunds.map(function(fund) {
+    var p = getFundAnnualPayout(fund, rate, qtrs);
+    totalAnnual = r2(totalAnnual + p.annual);
+    var isCustom = fund.payout_fixed || fund.payout_rate;
+    return '<tr><td style="font-weight:500;">' + esc(fund.name) + '</td><td class="td-right">' + fmt(fund.balance) + '</td><td class="td-right">' + (p.avg!==null?fmt(p.avg):'—') + '</td><td class="td-right">' + (p.qtrs||'—') + '</td><td>' + (isCustom?'<span class="badge badge-amber">Custom</span> ':'') + esc(p.rule) + '</td><td class="td-right" style="font-weight:600;">' + fmt(p.annual) + '</td><td class="td-right">' + fmt(r2(p.annual/4)) + '</td><td class="td-right">' + fmt(r2(p.annual/12)) + '</td>' + (isAdmin?'<td><button class="btn-ghost btn-sm" onclick="openFundModal(\''+fund.id+'\')">Edit</button></td>':'<td></td>') + '</tr>';
+  });
+  var tbody = document.getElementById('spending-tbody');
+  if (tbody) tbody.innerHTML = rows.join('') || '<tr><td colspan="9" class="text-center text-muted" style="padding:20px;">No active funds</td></tr>';
+  var annualEl = document.getElementById('sp-total-annual'); if(annualEl) annualEl.textContent = fmt(totalAnnual);
+  var qtrEl = document.getElementById('sp-total-quarterly'); if(qtrEl) qtrEl.textContent = fmt(r2(totalAnnual/4));
+}
+
+// Snapshot all fund balances
+async function snapshotAllFundBalances(snapshotDate) {
+  var activeFunds = allFunds.filter(function(f){return f.status==='active';});
+  var inserts = activeFunds.map(function(f){return {fund_id:f.id, snapshot_date:snapshotDate, balance:r2(f.balance), created_by:currentUser.email};});
+  if (!inserts.length) return;
+  await sb.from('fund_balance_snapshots').upsert(inserts, { onConflict:'fund_id,snapshot_date', ignoreDuplicates:true });
+}
+
+// Backfill test history
+async function backfillTestHistory() {
+  var activeFunds = allFunds.filter(function(f){return f.status==='active';});
+  if (!activeFunds.length) { alert('No active funds to backfill.'); return; }
+  var n = activeFunds.length;
+  var startingTotal = 95000000;
+  var inserts = [];
+  var today = new Date();
+  for (var q=15; q>=0; q--) {
+    var d = new Date(today);
+    d.setMonth(d.getMonth() - q*3);
+    var qMonth = Math.floor(d.getMonth()/3)*3+2;
+    var qEnd = new Date(d.getFullYear(), qMonth+1, 0);
+    var snapDate = qEnd.toISOString().slice(0,10);
+    var yearsFromStart = 4 - q*3/12;
+    var totalAtTime = r2(startingTotal * Math.pow(1.06, Math.max(0,yearsFromStart)));
+    var perFund = r2(totalAtTime/n);
+    activeFunds.forEach(function(fund){ inserts.push({fund_id:fund.id, snapshot_date:snapDate, balance:perFund, created_by:'system-backfill'}); });
+  }
+  var res = await sb.from('fund_balance_snapshots').upsert(inserts, {onConflict:'fund_id,snapshot_date', ignoreDuplicates:true});
+  if (res.error) { alert('Backfill error: ' + res.error.message); return; }
+  var currentTotal = r2(startingTotal * Math.pow(1.06, 4));
+  var currentPerFund = r2(currentTotal/n);
+  for (var i=0; i<activeFunds.length; i++) { await sb.from('funds').update({balance:currentPerFund}).eq('id',activeFunds[i].id); }
+  await loadData();
+  alert('Backfill complete! ' + inserts.length + ' snapshots seeded.');
+  renderCalculatorPage();
+}
+
+// ─── TX CHANGE REQUESTS ───────────────────────────────────────────────────────
+var allChangeRequests = [];
+var currentCRTab = 'pending';
+
+async function loadChangeRequests() {
+  var res = await sb.from('tx_change_requests').select('*, tx:fund_transactions(tx_date,tx_type,amount,note,fund_id,donor_source)').order('created_at',{ascending:false}).limit(100000);
+  allChangeRequests = res.data || [];
+  var pending = allChangeRequests.filter(function(r){return r.status==='pending';}).length;
+  var badge = document.getElementById('cr-badge');
+  if (badge) { badge.textContent = pending; badge.style.display = pending ? 'inline' : 'none'; }
+}
+
+function setCRTab(tab, btn) {
+  currentCRTab = tab;
+  document.querySelectorAll('#page-change-requests .tab-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  renderCRTable();
+}
+
+function renderCRTable() {
+  var reqs = currentCRTab === 'all' ? allChangeRequests : allChangeRequests.filter(function(r){return r.status===currentCRTab;});
+  var tbody = document.getElementById('cr-tbody');
+  var isAdmin = currentProfile.role === 'admin';
+  if (!reqs.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:20px;">No requests</td></tr>'; return; }
+  tbody.innerHTML = '';
+  reqs.forEach(function(r) {
+    var tx = r.tx || {};
+    var fund = allFunds.find(function(f){return f.id===tx.fund_id;});
+    var txDesc = [fmtDate(tx.tx_date), tx.tx_type, fmt(tx.amount)].filter(Boolean).join(' · ');
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td><span class="badge ' + (r.request_type==='delete'?'badge-red':'badge-amber') + '">' + esc(r.request_type) + '</span></td>' +
+      '<td>' + esc(fund?fund.name:'—') + '</td>' +
+      '<td class="text-muted" style="font-size:12px;">' + esc(txDesc) + '</td>' +
+      '<td>' + esc(r.reason||'—') + '</td>' +
+      '<td class="text-muted">' + esc(r.requested_by||'—') + '</td>' +
+      '<td>' + fmtDatetime(r.created_at) + '</td>' +
+      '<td><span class="badge ' + redemptionBadge(r.status) + '">' + esc(r.status) + '</span></td>' +
+      '<td></td>';
+    if (isAdmin && r.status==='pending') {
+      var btn = document.createElement('button');
+      btn.className = 'btn-gold btn-sm';
+      btn.textContent = 'Review';
+      btn.onclick = function(){ openReviewCR(r.id); };
+      tr.cells[7].appendChild(btn);
+    }
+    tbody.appendChild(tr);
+  });
+}
+
+function openEditTxModal(txId) {
+  var tx = allTransactions.find(function(t){return t.id===txId;});
+  if (!tx) return;
+  var fund = allFunds.find(function(f){return f.id===tx.fund_id;});
+  document.getElementById('redemption-modal-title').textContent = 'Request Transaction Edit';
+  var h = '<div class="notice notice-info" style="margin-bottom:14px;">Edits require approval by a second admin.</div>';
+  h += '<div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);padding:12px;margin-bottom:14px;">';
+  h += '<div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Current Transaction</div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">';
+  h += '<div><span class="text-muted">Fund:</span> ' + esc(fund?fund.name:'—') + '</div>';
+  h += '<div><span class="text-muted">Date:</span> ' + fmtDate(tx.tx_date) + '</div>';
+  h += '<div><span class="text-muted">Type:</span> ' + esc(tx.tx_type) + '</div>';
+  h += '<div><span class="text-muted">Amount:</span> ' + fmt(tx.amount) + '</div>';
+  h += '</div></div>';
+  h += '<div class="form-grid">';
+  h += '<div class="form-row"><label>New Date</label><input type="date" id="edit-date" value="' + esc(tx.tx_date||'') + '"></div>';
+  h += '<div class="form-row"><label>New Amount</label><input type="number" step="0.01" id="edit-amount" value="' + r2(tx.amount) + '"></div>';
+  h += '<div class="form-row"><label>New Type</label><select id="edit-type"><option>Subscription</option><option>Redemption</option><option>Return Allocation</option><option>Return Correction</option></select></div>';
+  h += '<div class="form-row"><label>Donor / Source</label><input id="edit-donor" value="' + esc(tx.donor_source||'') + '"></div>';
+  h += '<div class="form-row full"><label>New Note</label><input id="edit-note" value="' + esc(tx.note||'') + '"></div>';
+  h += '<div class="form-row full"><label>Reason *</label><textarea id="edit-reason" style="min-height:50px;"></textarea></div>';
+  h += '</div>';
+  h += '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-redemption\')">Cancel</button><button class="btn-primary" onclick="submitEditRequest(\'' + txId + '\')">Submit</button></div>';
+  document.getElementById('redemption-modal-body').innerHTML = h;
+  openModal('modal-redemption');
+}
+
+async function submitEditRequest(txId) {
+  var tx = allTransactions.find(function(t){return t.id===txId;});
+  if (!tx) return;
+  var reason = document.getElementById('edit-reason').value.trim();
+  if (!reason) return alert('Please provide a reason.');
+  var proposed = { tx_date:document.getElementById('edit-date').value, amount:r2(document.getElementById('edit-amount').value), tx_type:document.getElementById('edit-type').value, donor_source:document.getElementById('edit-donor').value.trim(), note:document.getElementById('edit-note').value.trim() };
+  var res = await sb.from('tx_change_requests').insert({ request_type:'edit', tx_id:txId, current_data:{tx_date:tx.tx_date,amount:r2(tx.amount),tx_type:tx.tx_type,donor_source:tx.donor_source,note:tx.note}, proposed_data:proposed, reason:reason, requested_by:currentUser.email, status:'pending' });
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  closeModal('modal-redemption');
+  alert('Edit request submitted.');
+  await loadChangeRequests();
+}
+
+function openDeleteTxModal(txId) {
+  var tx = allTransactions.find(function(t){return t.id===txId;});
+  if (!tx) return;
+  var fund = allFunds.find(function(f){return f.id===tx.fund_id;});
+  document.getElementById('redemption-modal-title').textContent = 'Request Transaction Deletion';
+  var h = '<div class="notice notice-warn" style="margin-bottom:14px;">Deletion requires approval by a second admin.</div>';
+  h += '<div style="background:var(--red-pale);border:1px solid #f5b7b7;border-radius:var(--radius);padding:12px;margin-bottom:14px;">';
+  h += '<div style="font-size:13px;"><strong>Fund:</strong> ' + esc(fund?fund.name:'—') + ' &nbsp; <strong>Date:</strong> ' + fmtDate(tx.tx_date) + ' &nbsp; <strong>Amount:</strong> ' + fmt(tx.amount) + '</div>';
+  h += '</div>';
+  h += '<div class="form-row"><label>Reason *</label><textarea id="delete-reason" style="min-height:60px;"></textarea></div>';
+  h += '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-redemption\')">Cancel</button><button class="btn-danger" onclick="submitDeleteRequest(\'' + txId + '\')">Submit Deletion Request</button></div>';
+  document.getElementById('redemption-modal-body').innerHTML = h;
+  openModal('modal-redemption');
+}
+
+async function submitDeleteRequest(txId) {
+  var tx = allTransactions.find(function(t){return t.id===txId;});
+  if (!tx) return;
+  var reason = document.getElementById('delete-reason').value.trim();
+  if (!reason) return alert('Please provide a reason.');
+  var res = await sb.from('tx_change_requests').insert({ request_type:'delete', tx_id:txId, current_data:{tx_date:tx.tx_date,amount:r2(tx.amount),tx_type:tx.tx_type,donor_source:tx.donor_source,note:tx.note,fund_id:tx.fund_id}, proposed_data:null, reason:reason, requested_by:currentUser.email, status:'pending' });
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  closeModal('modal-redemption');
+  alert('Deletion request submitted.');
+  await loadChangeRequests();
+}
+
+function openReviewCR(id) {
+  var req = allChangeRequests.find(function(r){return r.id===id;});
+  if (!req) return;
+  var tx = req.tx || {};
+  var fund = allFunds.find(function(f){return f.id===tx.fund_id;});
+  var isDelete = req.request_type === 'delete';
+  var p = req.proposed_data || {};
+  var diffHtml = '';
+  if (!isDelete) {
+    var fields = [['Date',fmtDate(req.current_data&&req.current_data.tx_date),fmtDate(p.tx_date)],['Amount',fmt(req.current_data&&req.current_data.amount),fmt(p.amount)],['Type',req.current_data&&req.current_data.tx_type,p.tx_type],['Note',req.current_data&&req.current_data.note||'—',p.note||'—']];
+    diffHtml = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;margin-bottom:16px;"><div style="font-weight:700;color:var(--gray-400);font-size:10px;">Field</div><div style="font-weight:700;color:var(--gray-400);font-size:10px;">Current</div><div style="font-weight:700;color:var(--navy);font-size:10px;">Proposed</div>';
+    fields.forEach(function(f){ var changed=f[1]!==f[2]; diffHtml+='<div style="padding:4px 0;border-top:1px solid var(--gray-100);font-weight:500;">'+esc(f[0])+'</div><div style="padding:4px 0;border-top:1px solid var(--gray-100);'+(changed?'text-decoration:line-through;color:var(--gray-400);':'')+'">'+(f[1]||'—')+'</div><div style="padding:4px 0;border-top:1px solid var(--gray-100);'+(changed?'color:var(--green);font-weight:600;':'')+'">'+(f[2]||'—')+'</div>'; });
+    diffHtml += '</div>';
+  } else {
+    diffHtml = '<div class="notice notice-error" style="margin-bottom:14px;">This will delete: <strong>' + fmtDate(tx.tx_date) + ' · ' + esc(tx.tx_type) + ' · ' + fmt(tx.amount) + '</strong> from <strong>' + esc(fund?fund.name:'—') + '</strong></div>';
+  }
+  var isSelf = req.requested_by === currentUser.email;
+  document.getElementById('cr-modal-title').textContent = isDelete ? 'Review Deletion Request' : 'Review Edit Request';
+  var h = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">';
+  h += '<div><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;">Fund</div><div>' + esc(fund?fund.name:'—') + '</div></div>';
+  h += '<div><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;">Requested By</div><div>' + esc(req.requested_by) + '</div></div>';
+  h += '<div style="grid-column:1/-1;"><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;">Reason</div><div>' + esc(req.reason||'—') + '</div></div>';
+  h += '</div>' + diffHtml;
+  if (isSelf) h += '<div class="notice notice-warn" style="margin-bottom:12px;">You submitted this request. A different admin must approve it.</div>';
+  h += '<div class="form-row"><label>Review Note (optional)</label><textarea id="cr-review-note" style="min-height:50px;"></textarea></div>';
+  h += '<div class="form-actions">';
+  if (!isSelf) {
+    h += '<button class="btn-primary btn-sm" style="background:var(--green);" onclick="processCRDecision(\'' + id + '\',true)">Approve</button>';
+    h += '<button class="btn-danger btn-sm" onclick="processCRDecision(\'' + id + '\',false)">Reject</button>';
+  }
+  h += '<button class="btn-secondary btn-sm" onclick="closeModal(\'modal-review-cr\')">Cancel</button>';
+  h += '</div>';
+  document.getElementById('cr-modal-body').innerHTML = h;
+  openModal('modal-review-cr');
+}
+
+async function processCRDecision(id, approved) {
+  var req = allChangeRequests.find(function(r){return r.id===id;});
+  if (!req) return;
+  var note = document.getElementById('cr-review-note').value.trim();
+  var status = approved ? 'approved' : 'rejected';
+  var updRes = await sb.from('tx_change_requests').update({ status:status, reviewed_by:currentUser.email, reviewed_at:new Date().toISOString(), review_note:note }).eq('id', id);
+  if (updRes.error) { alert('Error: ' + updRes.error.message); return; }
+  if (approved) {
+    var tx = allTransactions.find(function(t){return t.id===req.tx_id;});
+    var fund = tx ? allFunds.find(function(f){return f.id===tx.fund_id;}) : null;
+    if (req.request_type === 'delete') {
+      await sb.from('tx_change_requests').delete().eq('tx_id', req.tx_id);
+      var delRes = await sb.from('fund_transactions').delete().eq('id', req.tx_id);
+      if (delRes.error) { alert('Delete error: ' + delRes.error.message); return; }
+      if (fund && tx) await sb.from('funds').update({ balance: r2(r2(fund.balance)-r2(tx.amount)) }).eq('id', fund.id);
+    } else if (req.request_type === 'edit') {
+      var p = req.proposed_data;
+      if (fund && tx && r2(p.amount) !== r2(tx.amount)) await sb.from('funds').update({ balance: r2(r2(fund.balance)+(r2(p.amount)-r2(tx.amount))) }).eq('id', fund.id);
+      var editRes = await sb.from('fund_transactions').update({ tx_date:p.tx_date, amount:r2(p.amount), tx_type:p.tx_type, donor_source:p.donor_source, note:p.note }).eq('id', req.tx_id);
+      if (editRes.error) { alert('Edit error: ' + editRes.error.message); return; }
+    }
+  }
+  closeModal('modal-review-cr');
+  await loadData();
+  await loadChangeRequests();
+  renderCRTable();
+  renderDashboard();
+  alert(approved ? 'Request approved and applied.' : 'Request rejected.');
+}
+
+// ─── FUND DETAIL CHART ────────────────────────────────────────────────────────
+var fundDetailChart = null;
+var currentFundChartRange = '12m';
+
+function setFundChartRange(range, fundId) {
+  currentFundChartRange = range;
+  var btn12 = document.getElementById('chart-btn-12m');
+  var btn5y = document.getElementById('chart-btn-5y');
+  if(btn12) btn12.classList.toggle('active', range==='12m');
+  if(btn5y) btn5y.classList.toggle('active', range==='5y');
+  var title = document.getElementById('fund-chart-title');
+  if(title) title.textContent = range==='12m' ? 'Fund Balance — Last 12 Months' : 'Fund Balance — Last 5 Years';
+  renderFundDetailChart(fundId, range);
+}
+
+async function renderFundDetailChart(fundId, range) {
+  range = range || currentFundChartRange;
+  var canvas = document.getElementById('fund-detail-chart');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var isMonthly = range === '12m';
+  var txs = allTransactions.filter(function(t){return t.fund_id===fundId;});
+  var snapRes = await sb.from('fund_balance_snapshots').select('snapshot_date,balance').eq('fund_id',fundId).order('snapshot_date').limit(100000);
+  var snaps = snapRes.data || [];
+  var snapMap = {};
+  snaps.forEach(function(s){ snapMap[s.snapshot_date] = r2(s.balance); });
+  var labels=[], balances=[], contributions=[], payouts=[];
+  var now = new Date();
+  if (isMonthly) {
+    var cutoff = new Date(now.getFullYear(), now.getMonth()-12, 1);
+    var cutoffStr = cutoff.toISOString().slice(0,10);
+    var priorSnaps = snaps.filter(function(s){return s.snapshot_date<=cutoffStr;});
+    var startBal = priorSnaps.length ? r2(priorSnaps[priorSnaps.length-1].balance) : 0;
+    var txByMonth = {};
+    txs.forEach(function(t){ var key=(t.tx_date||'').slice(0,7); if(!txByMonth[key]) txByMonth[key]={contrib:0,payout:0}; if(t.tx_type==='Subscription') txByMonth[key].contrib+=r2(t.amount); else if(t.tx_type==='Redemption') txByMonth[key].payout+=Math.abs(r2(t.amount)); });
+    var bal = startBal;
+    for (var i=11; i>=0; i--) { var d=new Date(now.getFullYear(),now.getMonth()-i,1); var key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); var mo=txByMonth[key]||{contrib:0,payout:0}; bal=r2(bal+mo.contrib-mo.payout); var mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]; labels.push(mn+' '+String(d.getFullYear()).slice(2)); balances.push(bal); contributions.push(mo.contrib); payouts.push(mo.payout); }
+  } else {
+    var txByQuarter = {};
+    txs.forEach(function(t){ if(!t.tx_date) return; var d=new Date(t.tx_date+'T00:00:00'); var qKey=d.getFullYear()+'-Q'+(Math.floor(d.getMonth()/3)+1); if(!txByQuarter[qKey]) txByQuarter[qKey]={contrib:0,payout:0}; if(t.tx_type==='Subscription') txByQuarter[qKey].contrib+=r2(t.amount); else if(t.tx_type==='Redemption') txByQuarter[qKey].payout+=Math.abs(r2(t.amount)); });
+    var allDates = Object.keys(snapMap).sort();
+    for (var qi=19; qi>=0; qi--) { var qd=new Date(now); qd.setMonth(qd.getMonth()-qi*3); var qMonth=Math.floor(qd.getMonth()/3)*3+2; var qEnd=new Date(qd.getFullYear(),qMonth+1,0); var dateStr=qEnd.toISOString().slice(0,10); var qKey2=qEnd.getFullYear()+' Q'+(Math.floor(qEnd.getMonth()/3)+1); var bal2=null; if(snapMap[dateStr]!==undefined){bal2=snapMap[dateStr];}else{var before=allDates.filter(function(d){return d<=dateStr;}).pop();var after=allDates.filter(function(d){return d>dateStr;}).shift();if(before&&after){var ratio=(qEnd.getTime()-new Date(before).getTime())/(new Date(after).getTime()-new Date(before).getTime());bal2=r2(snapMap[before]+(snapMap[after]-snapMap[before])*ratio);}else if(before){bal2=snapMap[before];}else if(after){bal2=snapMap[after];}else{bal2=r2(allFunds.find(function(f){return f.id===fundId;})||0);}} var qtx=txByQuarter[qKey2]||{contrib:0,payout:0}; labels.push(qKey2); balances.push(bal2); contributions.push(qtx.contrib); payouts.push(qtx.payout); }
+  }
+  if (fundDetailChart) fundDetailChart.destroy();
+  fundDetailChart = new Chart(ctx, { type:'line', data:{ labels:labels, datasets:[{label:'Balance',data:balances,borderColor:'#1a2744',backgroundColor:'rgba(26,39,68,0.08)',borderWidth:2.5,pointRadius:3,fill:true,tension:0.3,yAxisID:'y'},{label:'Subscriptions',data:contributions,borderColor:'#2d6a4f',backgroundColor:'rgba(45,106,79,0.7)',borderWidth:0,type:'bar',yAxisID:'y2'},{label:'Redemptions',data:payouts,borderColor:'#8b1a1a',backgroundColor:'rgba(139,26,26,0.7)',borderWidth:0,type:'bar',yAxisID:'y2'}]}, options:{ responsive:true, interaction:{mode:'index',intersect:false}, plugins:{ legend:{position:'bottom',labels:{font:{size:11},padding:10}}, tooltip:{callbacks:{label:function(c){return ' '+c.dataset.label+': '+fmt(c.parsed.y);}}} }, scales:{ x:{ticks:{font:{size:10}}}, y:{position:'left',ticks:{font:{size:10},callback:function(v){return '$'+(Math.abs(v)>=1000000?(v/1000000).toFixed(1)+'M':Math.round(v/1000)+'k');}}}, y2:{position:'right',grid:{drawOnChartArea:false},ticks:{font:{size:10},callback:function(v){return '$'+Math.round(v/1000)+'k';}}} } } });
+}
+
+// ─── USERS ────────────────────────────────────────────────────────────────────
+function renderUsersTable() {
+  var tbody = document.getElementById('users-tbody');
+  if (!allUsers.length) { tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:20px;">No users found</td></tr>'; return; }
+  tbody.innerHTML = '';
+  allUsers.forEach(function(u) {
+    var tr = document.createElement('tr');
+    var sel = document.createElement('select');
+    sel.style.cssText = 'width:auto;font-size:12px;';
+    ['admin','staff'].forEach(function(r){ var o=document.createElement('option'); o.value=r; o.textContent=r; if(u.role===r) o.selected=true; sel.appendChild(o); });
+    sel.onchange = function(){ updateUserRole(u.id, sel.value); };
+    tr.innerHTML = '<td>'+esc(u.email)+'</td><td><span class="badge badge-navy">'+esc(u.role)+'</span></td><td class="text-muted">'+fmtDatetime(u.updated_at)+'</td><td></td>';
+    tr.cells[3].appendChild(sel);
+    tbody.appendChild(tr);
+  });
+}
+
+async function updateUserRole(userId, role) {
+  var res = await sb.from('user_profiles').update({role:role, updated_at:new Date().toISOString()}).eq('id',userId);
+  if (res.error) alert('Error: ' + res.error.message);
+  else await loadUsers();
+}
+
+function openInviteModal() {
+  var h = '<div class="notice notice-info" style="margin-bottom:12px;">Create the user in Supabase Auth first (Authentication → Users → Add user), then they will appear here after signing in for the first time.</div>';
+  h += '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-invite\')">Close</button></div>';
+  document.getElementById('invite-modal-body').innerHTML = h;
+  openModal('modal-invite');
+}
+
+// ─── ACCOUNT SETTINGS ─────────────────────────────────────────────────────────
+async function showAccountSettings() {
+  var factorsRes = await sb.auth.mfa.listFactors();
+  var hasMFA = factorsRes.data && factorsRes.data.totp && factorsRes.data.totp.length > 0;
+  var mfaSection = '<hr class="divider">';
+  mfaSection += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><strong style="font-size:13px;">Two-Factor Authentication</strong><span class="badge ' + (hasMFA?'badge-green':'badge-red') + '">' + (hasMFA?'Enabled':'Not set up') + '</span></div>';
+  mfaSection += '<p class="text-muted" style="font-size:12px;margin-bottom:10px;">' + (hasMFA?'MFA is active on your account.':'Set up an authenticator app to secure your account.') + '</p>';
+  if (hasMFA) { mfaSection += '<button class="btn-danger btn-sm" onclick="disableMFA()">Remove MFA</button>'; }
+  else { mfaSection += '<button class="btn-primary btn-sm" onclick="closeModal(\'modal-account\');showMFAEnroll()">Set Up MFA</button>'; }
+  mfaSection += '<hr class="divider">';
+  var h = '<div style="margin-bottom:14px;"><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:4px;">Email</div><div>' + esc(currentUser.email) + '</div></div>';
+  h += '<div style="margin-bottom:18px;"><div class="text-muted" style="font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:4px;">Role</div><div><span class="badge badge-navy">' + esc(currentProfile.role) + '</span></div></div>';
+  h += mfaSection;
+  h += '<div><strong style="font-size:13px;">Change Password</strong></div>';
+  h += '<div class="form-row" style="margin-top:10px;"><label>New Password (min 6 chars)</label><input type="password" id="new-pass" placeholder="••••••••"></div>';
+  h += '<div class="form-row"><label>Confirm Password</label><input type="password" id="confirm-pass" placeholder="••••••••"></div>';
+  h += '<div id="pass-msg" style="margin-bottom:8px;font-size:13px;"></div>';
+  h += '<div class="form-actions"><button class="btn-secondary" onclick="closeModal(\'modal-account\')">Close</button><button class="btn-primary" onclick="changePassword()">Update Password</button></div>';
+  document.getElementById('account-modal-body').innerHTML = h;
+  openModal('modal-account');
+}
+
+async function disableMFA() {
+  if (!confirm('Remove MFA from your account?')) return;
+  var factorsRes = await sb.auth.mfa.listFactors();
+  var factorId = factorsRes.data && factorsRes.data.totp && factorsRes.data.totp[0] ? factorsRes.data.totp[0].id : null;
+  if (!factorId) return;
+  var res = await sb.auth.mfa.unenroll({ factorId:factorId });
+  if (res.error) { alert('Error: ' + res.error.message); return; }
+  alert('MFA removed.');
+  showAccountSettings();
+}
+
+async function changePassword() {
+  var p1 = document.getElementById('new-pass').value;
+  var p2 = document.getElementById('confirm-pass').value;
+  var msg = document.getElementById('pass-msg');
+  if (p1.length < 6) { msg.textContent='Min 6 characters.'; msg.style.color='var(--red)'; return; }
+  if (p1 !== p2) { msg.textContent='Passwords do not match.'; msg.style.color='var(--red)'; return; }
+  var res = await sb.auth.updateUser({ password:p1 });
+  if (res.error) { msg.textContent=res.error.message; msg.style.color='var(--red)'; }
+  else { msg.textContent='Password updated.'; msg.style.color='var(--green)'; }
+}
+
+// ─── IMPORT ───────────────────────────────────────────────────────────────────
+async function importFunds() {
+  var file = document.getElementById('import-funds-file').files[0];
+  if (!file) return;
+  Papa.parse(file, { header:true, skipEmptyLines:true, complete: async function(res) {
+    var rows = res.data; var ok=0, errs=[];
+    for (var i=0; i<rows.length; i++) {
+      var row = rows[i]; if (!row.name) continue;
+      var poolId = null;
+      if (row.pool_name) { var pool=allPools.find(function(p){return p.name.toLowerCase()===row.pool_name.toLowerCase();}); if(pool) poolId=pool.id; }
+      var r = await sb.from('funds').insert({ name:row.name.trim(), category:row.category||null, pool_id:poolId, restrictions:row.restrictions||null, established_date:row.established_date||null, balance:r2(row.opening_balance||0), status:row.status||'active', created_by:currentUser.email });
+      if (r.error) errs.push(row.name+': '+r.error.message); else ok++;
+    }
+    document.getElementById('import-funds-result').innerHTML = '<div class="notice '+(errs.length?'notice-warn':'notice-success')+'">'+ok+' funds imported.'+(errs.length?' Errors: '+errs.join('; '):'')+'</div>';
+    await loadData();
+  }});
+}
+
+async function importTransactions() {
+  var file = document.getElementById('import-tx-file').files[0];
+  if (!file) return;
+  Papa.parse(file, { header:true, skipEmptyLines:true, complete: async function(res) {
+    var rows=res.data; var ok=0,errs=[];
+    for (var i=0; i<rows.length; i++) {
+      var row=rows[i]; var fund=allFunds.find(function(f){return f.name.toLowerCase()===(row.fund_name||'').toLowerCase();});
+      if (!fund) { errs.push('Fund not found: '+row.fund_name); continue; }
+      var r=await sb.from('fund_transactions').insert({fund_id:fund.id,tx_date:row.tx_date,tx_type:row.tx_type,amount:r2(row.amount),donor_source:row.donor_source||null,note:row.note||null,created_by:currentUser.email});
+      if (r.error) errs.push(row.fund_name+': '+r.error.message); else ok++;
+    }
+    document.getElementById('import-tx-result').innerHTML = '<div class="notice '+(errs.length?'notice-warn':'notice-success')+'">'+ok+' transactions imported.'+(errs.length?' Errors: '+errs.join('; '):'')+'</div>';
+    await loadData();
+  }});
+}
+
+function copySetupSql() { navigator.clipboard.writeText(document.getElementById('page-setup-sql').textContent).then(function(){alert('SQL copied.');}); }
+
+// ─── MODAL HELPERS ────────────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(function(o){ o.addEventListener('click',function(e){if(e.target===o) o.classList.remove('open');}); });
+
+// ─── SEED PLACEHOLDER FUNDS ───────────────────────────────────────────────────
+async function seedPlaceholderFunds() {
+  var fundDefs = [{name:'Fund A',balance:2500000},{name:'Fund B',balance:500000},{name:'Fund C',balance:3000000},{name:'Fund D',balance:1500000},{name:'Fund E',balance:1300000},{name:'Fund F',balance:0},{name:'Fund G',balance:0},{name:'Fund H',balance:0},{name:'Fund I',balance:0},{name:'Fund J',balance:0},{name:'Fund K',balance:0},{name:'Fund L',balance:0}];
+  var existing = allFunds.map(function(f){return f.name;});
+  var toInsert = fundDefs.filter(function(f){return !existing.includes(f.name);}).map(function(f){return {name:f.name,category:'Endowment',status:'active',balance:f.balance,notes:'Placeholder',created_by:'system'};});
+  if (!toInsert.length) { alert('Funds already exist.'); return; }
+  var res = await sb.from('funds').insert(toInsert);
+  if (res.error) { alert('Error: '+res.error.message); return; }
+  await loadData(); renderFundsTable(); alert(toInsert.length+' funds created.');
+}
+
+// ─── CREST ────────────────────────────────────────────────────────────────────
+function setCrestImages() {
+  var srcEl = document.getElementById('crest-src');
+  if (!srcEl) return;
+  function apply() {
+    var src = srcEl.src;
+    if (!src || src === location.href) return;
+    ['auth-crest','sidebar-crest'].forEach(function(id){ var el=document.getElementById(id); if(el){el.src=src;el.style.display='block';} });
+  }
+  if (srcEl.complete) { apply(); } else { srcEl.onload = apply; }
+}
+</script>
+</body>
+</html>
