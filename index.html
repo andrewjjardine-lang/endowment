@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Diocese of London — Endowment Fund Manager</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1522,7 +1525,7 @@ async function renderPoolsGrid() {
     card += '<div class="card-body">';
     card += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">';
     card += '<div><div class="metric-label">Total Allocated</div>';
-    card += '<div style="font-family:'Libre Baskerville',serif;font-size:20px;color:var(--navy);">' + fmt(totalAlloc) + '</div></div>';
+    card += '<div class="metric-value" style="font-size:20px;">' + fmt(totalAlloc) + '</div></div>';
     card += '<div><div class="metric-label">Funds in Pool</div>';
     card += '<div style="font-size:20px;font-weight:500;">' + fundCount + '</div></div>';
     card += '<div><div class="metric-label">YTD Return</div>';
@@ -1531,7 +1534,7 @@ async function renderPoolsGrid() {
     card += '<div style="font-size:12px;">' + (lastReturn ? fmtDate(lastReturn.return_date) + ' &nbsp; ' + fmt(lastReturn.gross_return) : '—') + '</div></div>';
     card += '</div>';
     if (isAdmin) {
-      card += '<button class="btn-ghost btn-sm" onclick="openPoolModal('' + pool.id + '')">Edit Pool</button>';
+      card += '<button class="btn-ghost btn-sm" onclick="openPoolModal(\'' + pool.id + '\')">Edit Pool</button>';
     }
     card += '</div></div>';
     return card;
